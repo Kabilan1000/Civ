@@ -1,19 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { inBounds, isAdjacent4, isPassable, manhattan, neighbors4, stepCost, toIndex, toPoint } from './grid.ts'
-import type { Terrain, TileMap } from './types.ts'
-
-function mapOf(rows: string[]): TileMap {
-  const legend: Record<string, Terrain> = { '~': 'water', '.': 'grass', s: 'sand', f: 'forest', '#': 'rock' }
-  const terrain = rows.join('').split('').map((ch) => legend[ch]!)
-  return {
-    width: rows[0]!.length,
-    height: rows.length,
-    terrain,
-    resources: terrain.map(() => null),
-    discovered: terrain.map(() => 0 as const),
-    version: 0,
-  }
-}
+import { asciiMap as mapOf } from './__tests__/asciiMap.ts'
 
 describe('grid', () => {
   const map = mapOf(['~.s', 'f#.'])

@@ -1,12 +1,8 @@
-import {
-  DECISION_INTERVAL,
-  INITIAL_NEEDS,
-  ROLES,
-  SPAWN_RADIUS,
-  TRAIT_PRECISION,
-} from '../constants.ts'
-import { isPassable, manhattan, toPoint } from '../grid.ts'
+import { DECISION_INTERVAL, INITIAL_NEEDS, ROLES, TRAIT_PRECISION } from '../constants.ts'
+import { toPoint } from '../grid.ts'
 import { allocateId } from '../ids.ts'
+import { spawnCandidates } from '../map/generate.ts'
+import { reachableMask } from '../path/flood.ts'
 import { nextFloat, shuffle } from '../rng.ts'
 import type { Citizen, Personality, Point, Role, RngState, TileIndex, WorldState } from '../types.ts'
 import { CITIZEN_NAMES } from './names.ts'
@@ -25,17 +21,11 @@ export function randomPersonality(rng: RngState): Personality {
 }
 
 /**
- * Distinct passable tiles within SPAWN_RADIUS (Manhattan) of the campfire,
- * excluding the campfire tile itself, in seeded random order.
+ * Distinct passable tiles within SPAWN_RADIUS (Manhattan) of the campfire
+ * that are reachable from it, excluding the campfire tile, in seeded order.
  */
 export function pickSpawnTiles(state: WorldState, campTile: TileIndex, count: number): TileIndex[] {
-  const { map } = state
-  const center = toPoint(campTile, map.width)
-  const candidates: TileIndex[] = []
-  for (let i = 0; i < map.terrain.length; i++) {
-    if (i === campTile || !isPassable(map, i)) continue
-    if (manhattan(toPoint(i, map.width), center) <= SPAWN_RADIUS) candidates.push(i)
-  }
+  const candidates = spawnCandidates(state.map, campTile, reachableMask(state.map, campTile))
   if (candidates.length < count) {
     throw new Error(`Not enough spawn tiles: need ${count}, found ${candidates.length}`)
   }

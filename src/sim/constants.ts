@@ -37,8 +37,41 @@ export type Speed = (typeof SPEEDS)[number]
 export const MIN_MAP_SIZE = 8
 export const MAX_MAP_SIZE = 128
 
-/** Placeholder map (until M2): grass surrounded by a water border this many tiles thick. */
-export const PLACEHOLDER_BORDER = 1
+// ── Map generation ──────────────────────────────────────────────────────────
+
+/** Regenerate attempts (with derived seeds) before falling back to a carved clearing. */
+export const MAPGEN_MAX_ATTEMPTS = 12
+
+export const ELEVATION_OCTAVES = [
+  { cell: 9, weight: 0.65 },
+  { cell: 4, weight: 0.35 },
+] as const
+export const MOISTURE_OCTAVES = [
+  { cell: 7, weight: 0.7 },
+  { cell: 3, weight: 0.3 },
+] as const
+
+/** How strongly elevation drops towards the map edge (shapes an island). */
+export const ISLAND_FALLOFF = 0.7
+
+/** Terrain shares by elevation rank (lowest → water, then sand; highest → rock). */
+export const WATER_FRACTION = 0.3
+export const SAND_FRACTION = 0.08
+export const ROCK_FRACTION = 0.05
+/** Share of the remaining grass/forest land that becomes forest (wettest first). */
+export const FOREST_FRACTION_OF_LAND = 0.35
+
+/** The settlement's connected land region must cover at least this share of the map. */
+export const MIN_REGION_FRACTION = 0.3
+
+export const BERRY_CHANCE = 0.1 // per grass tile
+export const TREE_CHANCE = 0.55 // per forest tile
+export const BERRY_MAX = 5
+export const TREE_WOOD_MAX = 8
+
+/** Reachable resource tiles guaranteed inside the starting discovery radius. */
+export const MIN_START_BERRY_TILES = 3
+export const MIN_START_TREE_TILES = 3
 
 /** Radius (euclidean, tiles) around the campfire that starts discovered. */
 export const START_DISCOVERY_RADIUS = 6

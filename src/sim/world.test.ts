@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 import { CITIZEN_NAMES } from './citizens/names.ts'
 import { ROLES, SCHEMA_VERSION, SPAWN_RADIUS, START_DISCOVERY_RADIUS } from './constants.ts'
 import { isPassable, manhattan, toIndex, toPoint } from './grid.ts'
+import { analyzeStartArea } from './map/generate.ts'
+import { findPath } from './path/astar.ts'
 import { serialize } from './serialize.ts'
 import { createWorld } from './world.ts'
 
@@ -26,10 +28,11 @@ describe('createWorld', () => {
     expect(serialize(createWorld({ seed: 'one' }))).not.toBe(serialize(createWorld({ seed: 'two' })))
   })
 
-  it('places a complete campfire at the map centre', () => {
+  it('places a single complete campfire on reachable grass', () => {
     expect(state.structures).toHaveLength(1)
     expect(camp.complete).toBe(true)
-    expect(camp.tile).toBe(toIndex(18, 12, 36))
+    expect(state.map.terrain[camp.tile]).toBe('grass')
+    expect(state.map.resources[camp.tile]).toBeNull()
   })
 
   it('creates 12 citizens with unique ids and names', () => {
@@ -55,11 +58,12 @@ describe('createWorld', () => {
     }
   })
 
-  it('spawns citizens on distinct, passable, discovered tiles near the campfire', () => {
+  it('spawns citizens on distinct, passable, reachable, discovered tiles near the campfire', () => {
     const tiles = new Set<number>()
     for (const c of state.citizens) {
       const t = toIndex(c.pos.x, c.pos.y, state.map.width)
       expect(isPassable(state.map, t)).toBe(true)
+      expect(findPath(state.map, camp.tile, t)).not.toBeNull()
       expect(state.map.discovered[t]).toBe(1)
       expect(t).not.toBe(camp.tile)
       expect(manhattan(c.pos, campPos)).toBeLessThanOrEqual(SPAWN_RADIUS)
@@ -79,7 +83,7 @@ describe('createWorld', () => {
 
   it('records a worldCreated event at tick 0', () => {
     expect(state.events).toHaveLength(1)
-    expect(state.events[0]).toMatchObject({ kind: 'worldCreated', tick: 0, data: { seed: 'spawn-test' } })
+    expect(state.events[0]).toMatchObject({ kind: 'worldCreated', tick: 0, data: { seed: 'spawn-test', mapAttempt: 0 } })
     expect(state.events[0]!.citizenIds).toHaveLength(12)
   })
 
@@ -94,7 +98,17 @@ describe('createWorld', () => {
       const w = createWorld({ seed: `seed-${i}` })
       expect(w.citizens).toHaveLength(12)
       expect(new Set(w.citizens.map((c) => `${c.pos.x},${c.pos.y}`)).size).toBe(12)
-      for (const c of w.citizens) expect(isPassable(w.map, toIndex(c.pos.x, c.pos.y, w.map.width))).toBe(true)
+      const campTile = w.structures[0]!.tile
+      for (const c of w.citizens) {
+        const t = toIndex(c.pos.x, c.pos.y, w.map.width)
+        expect(isPassable(w.map, t)).toBe(true)
+        expect(t).not.toBe(campTile)
+        expect(findPath(w.map, campTile, t)).not.toBeNull()
+      }
+      const start = analyzeStartArea(w.map, campTile)
+      for (const tile of [...start.berryTiles, ...start.treeTiles]) expect(w.map.discovered[tile]).toBe(1)
+      expect(start.berryTiles.length).toBeGreaterThan(0)
+      expect(start.treeTiles.length).toBeGreaterThan(0)
     }
   })
 

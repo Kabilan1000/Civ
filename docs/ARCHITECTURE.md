@@ -120,23 +120,51 @@ Each tick runs systems in a fixed order:
 ### 3.5 Map
 
 - 36 × 24 tiles, stored as a flat array indexed `y * width + x`.
-- Generation: seeded 2D value noise for elevation and moisture (own
-  implementation, polynomial smoothstep only) → terrain: `water`, `sand`,
-  `grass`, `forest`, `rock`.
-- Resource nodes: berry bushes on grass, trees in forest, each with
-  `amount`/`max` and regrowth.
-- Validation after generation: flood fill from the spawn tile; the largest
-  passable region must hold the spawn, ≥ N berry tiles and ≥ M tree tiles.
-  Otherwise regenerate with a derived seed (bounded retries, deterministic).
-- `discovered` mask (fog of war): starts as a radius around spawn; explorers
-  reveal more. Foragers/choppers only target discovered tiles.
+- **Own RNG:** attempt *k* is generated from a separate RNG seeded
+  `"<seed>:map:<k>"`, not from `WorldState.rng`, so maps never change when
+  citizen-creation code draws more or fewer random numbers.
+- **Terrain:** seeded 2D value noise (lattice values from the RNG, bilinear +
+  polynomial smoothstep) for elevation and moisture. Elevation falls off
+  quadratically towards the edges to form an island. Terrain is assigned by
+  elevation *rank*, so the mix is stable across seeds: lowest 30% water, next
+  8% sand, top 5% rock; of the remaining land the wettest 35% is forest, the
+  rest grass. The outer border is always water.
+- **Campfire:** the grass tile closest to the map centre (Manhattan, ties by
+  index) inside the largest connected land region, with at least
+  `citizenCount` reachable tiles within `SPAWN_RADIUS`.
+- **Resources:** berries (max 5) on 10% of grass, trees (max 8 wood) on 55% of
+  forest, one RNG draw per grass/forest tile in index order. Regrowth comes with
+  the resources system (M4).
+- **Validation & repair (deterministic):**
+  1. Largest region < 30% of the map, or no valid campfire tile → next attempt
+     (up to 12).
+  2. Fewer than 3 reachable berry / tree tiles inside the starting discovery
+     radius → plant berries on reachable grass, or turn reachable grass into
+     forest with a tree, in seeded order.
+  3. All attempts fail → fallback: carve a grass clearing around the centre
+     (border stays water). This always validates. If even that can't fit the
+     citizens, `createWorld` throws a clear error.
+  `worldCreated` event data records `mapAttempt` (−1 = fallback) and
+  `mapRepairs`. In sampling, 500 of 500 seeds passed on attempt 0.
+- `discovered` mask (fog of war): starts as a radius of 6 around the campfire,
+  which always contains reachable food and wood. Explorers reveal more.
+  Foragers/choppers only target discovered tiles.
 
 ### 3.6 Movement & pathfinding
 
 - 4-directional grid movement; `water` and `rock` are impassable.
 - Integer step costs: grass 2, sand 3, forest 3 (cost = ticks to cross).
-- A* with a binary heap, Manhattan heuristic, deterministic tie-breaking
-  (f, then h, then tile index), and an expansion cap.
+- A* (`path/astar.ts`) with a binary heap, Manhattan heuristic × the cheapest
+  step cost (admissible, so paths are cost-optimal), neighbours in fixed
+  N, E, S, W order, deterministic tie-breaking (f, then h, then tile index),
+  and an optional `maxExpansions` cap.
+- **Path-return convention:** `findPath(map, start, goal)` returns the tiles to
+  step onto, **excluding `start` and including `goal`**; `[]` if
+  `start === goal`; `null` if either endpoint is invalid or impassable, the
+  goal is unreachable, or the cap was hit. Path cost = sum of `stepCost` of
+  the path's tiles.
+- `path/flood.ts`: reachability masks and region labelling for validation
+  (and later for "can I get there at all?" checks).
 - A citizen moves **one adjacent tile at a time**: `path` + `pathIndex` +
   `moveTicksLeft`. Never teleports. If the next tile becomes invalid, it
   repaths. The renderer interpolates between `pos` and the next path node using
@@ -442,12 +470,13 @@ little-worlds/
     │   ├── grid.ts                  # index/point helpers, neighbours, passability, cost
     │   ├── ids.ts                   # allocateId (single shared id counter)
     │   ├── map/
-    │   │   ├── placeholder.ts       # M1 grass + water-border map, revealAround (replaced in M2)
-    │   │   ├── noise.ts
-    │   │   └── generate.ts
+    │   │   ├── noise.ts             # seeded value noise
+    │   │   ├── generate.ts          # terrain, campfire, resources, validation/repair
+    │   │   └── discovery.ts         # revealAround, withinRadius
     │   ├── path/
     │   │   ├── heap.ts
-    │   │   └── astar.ts
+    │   │   ├── astar.ts             # findPath, pathCost
+    │   │   └── flood.ts             # reachableMask, labelRegions
     │   ├── citizens/
     │   │   ├── names.ts
     │   │   ├── create.ts

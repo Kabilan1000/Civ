@@ -2,9 +2,9 @@ import { createCitizens } from './citizens/create.ts'
 import { resolveConfig } from './config.ts'
 import { INITIAL_STOCKPILE, SCHEMA_VERSION, START_DISCOVERY_RADIUS } from './constants.ts'
 import { pushEvent } from './events.ts'
-import { toIndex } from './grid.ts'
 import { allocateId } from './ids.ts'
-import { createPlaceholderMap, revealAround } from './map/placeholder.ts'
+import { revealAround } from './map/discovery.ts'
+import { generateMap } from './map/generate.ts'
 import { seedRng } from './rng.ts'
 import { advanceTime } from './systems/time.ts'
 import type { Structure, TileIndex, WorldConfig, WorldState } from './types.ts'
@@ -24,13 +24,15 @@ function createCampfire(id: number, tile: TileIndex): Structure {
 
 /**
  * Build a new world at tick 0 from a seed. Fully deterministic: the same
- * config always yields an identical state. Creation order (and thus RNG
- * draw order) is fixed: map, campfire, citizens, worldCreated event.
+ * config always yields an identical state. The map uses its own derived RNG
+ * (see map/generate.ts); WorldState.rng is then used in a fixed order for
+ * citizens. Creation order: map, campfire, citizens, worldCreated event.
  */
 export function createWorld(overrides: Partial<WorldConfig> = {}): WorldState {
   const config = resolveConfig(overrides)
-  const map = createPlaceholderMap(config.width, config.height)
-  const campTile = toIndex(Math.floor(config.width / 2), Math.floor(config.height / 2), config.width)
+  const { map, campTile, attempt, repairs } = generateMap(config.seed, config.width, config.height, {
+    spawnTiles: config.citizenCount,
+  })
   revealAround(map, campTile, START_DISCOVERY_RADIUS)
 
   const state: WorldState = {
@@ -48,7 +50,11 @@ export function createWorld(overrides: Partial<WorldConfig> = {}): WorldState {
 
   state.structures.push(createCampfire(allocateId(state), campTile))
   state.citizens = createCitizens(state, campTile)
-  pushEvent(state, 'worldCreated', state.citizens.map((c) => c.id), { seed: config.seed })
+  pushEvent(state, 'worldCreated', state.citizens.map((c) => c.id), {
+    seed: config.seed,
+    mapAttempt: attempt,
+    mapRepairs: repairs,
+  })
   return state
 }
 
