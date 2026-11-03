@@ -10,24 +10,34 @@ interface Props {
 /** Open modals, innermost last: only the top one reacts to Escape. */
 const stack: object[] = []
 
-/** Accessible modal: Escape and backdrop click close it; focus moves into it. */
+/**
+ * Accessible modal: Escape (topmost only) and backdrop click close it. Focus
+ * moves into it once when it opens and returns to the opener when it closes.
+ * The effect runs once per mount — `onClose` is read through a ref, because
+ * parents pass a new function on every render (the UI re-renders at 5 Hz) and
+ * re-running the effect would keep pulling focus back to the dialog.
+ */
 export function Modal({ title, onClose, children, wide }: Props) {
   const ref = useRef<HTMLDivElement>(null)
+  const onCloseRef = useRef(onClose)
+  useEffect(() => {
+    onCloseRef.current = onClose
+  }, [onClose])
   useEffect(() => {
     const token = {}
     stack.push(token)
-    const previous = document.activeElement as HTMLElement | null
+    const opener = document.activeElement as HTMLElement | null
     ref.current?.focus()
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && stack.at(-1) === token) onClose()
+      if (e.key === 'Escape' && stack.at(-1) === token) onCloseRef.current()
     }
     window.addEventListener('keydown', onKey)
     return () => {
       window.removeEventListener('keydown', onKey)
       stack.splice(stack.indexOf(token), 1)
-      previous?.focus?.()
+      if (opener?.isConnected) opener.focus()
     }
-  }, [onClose])
+  }, [])
   return (
     <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div ref={ref} className={`modal${wide ? ' wide' : ''}`} role="dialog" aria-modal="true" aria-label={title} tabIndex={-1}>

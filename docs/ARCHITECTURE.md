@@ -644,6 +644,10 @@ history (so a tapped citizen's details are right under the map).
   “(late night)” — days begin at 06:00, so they still belong to that day.
 - **Accessibility**: visible `:focus-visible` rings, labelled controls,
   reduced-motion respected, text colours ≥ 4.5:1 against their panels.
+  Dialogs (`components/Modal.tsx`) move focus in once on open and return it
+  to the opener on close; their mount effect runs once (`onClose` via a ref)
+  — M9 fix: re-running it on every 5 Hz re-render pulled focus back to the
+  dialog every 200 ms, breaking keyboard navigation inside it.
 - **Controls**: pause/resume, 1x/3x/10x, seed field (+ random seed) and
   Restart, Save and Load (M8; `•` on Save marks unsaved progress).
 - **Dashboard** (`components/Dashboard.tsx`): population (and deaths), day &
@@ -670,9 +674,12 @@ history (so a tapped citizen's details are right under the map).
   exact while they move) or a name anywhere; a gold ring follows them; click
   empty ground or × to deselect. Dead citizens stay inspectable (no ring).
   The renderer's canvas listeners are removed in `destroy()`.
-- Re-render cost: panels update at ≤ 5 Hz from the snapshot; the feed and
-  charts memoise on `lastEventId` / `historyLength`. Measured: +≈2% main
-  thread at 10x vs M6; frame time unchanged.
+- Re-render cost: panels update at ≤ 5 Hz from the snapshot. The event
+  feed and history charts are `React.memo` components that receive only
+  `lastEventId` / `historyLength` / `worldId`, so they re-render only when an
+  event or sample is added (M9). At 10x our JavaScript (sim + React +
+  Pixi) is ≈5% of main-thread time; the rest of a headless frame is software
+  rasterisation.
 - Dev builds expose `window.__littleWorlds` (the controller) for automated
   browser checks; it is stripped from production builds.
 
