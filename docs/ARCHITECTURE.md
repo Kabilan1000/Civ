@@ -64,7 +64,15 @@ Allowed imports (enforced by an architecture test, see §9):
 ### 3.1 Time
 
 - `1 tick = 6 in-game minutes`; `TICKS_PER_DAY = 240`.
-- Day phase is derived from `tick % TICKS_PER_DAY` (night ≈ last 30% of the day).
+- **Tick zero:** `createWorld` returns a world at `tick = 0` = day 1, 06:00
+  (dawn). No tick has been simulated yet; tick 0 emits `worldCreated`.
+- **Stepping:** `step()` increments `tick` *first*, then runs the other
+  systems, so every system in a step sees the tick being simulated (1, 2, …).
+- **Day boundaries:** days begin at dawn. Day N starts at tick `(N-1) * 240`
+  (always 06:00). When a step lands on a multiple of 240, a `dayStarted`
+  event is emitted with the new day number.
+- Day phases by tick-of-day: dawn `0–19` (06:00), day `20–139` (08:00),
+  dusk `140–169` (20:00), night `170–239` (23:00–06:00, ≈29% of the day).
 - Speeds: base rate **5 ticks/s**; 1x = 5, 3x = 15, 10x = 50 ticks/s.
 
 ### 3.2 Determinism rules
@@ -295,11 +303,10 @@ interface SimEvent {
   citizenIds: number[]; data?: Record<string, number | string>;
 }
 
-interface CivStats {
-  day: number; population: number; housed: number;
-  avgNeeds: Needs; food: number; wood: number;
-  history: { tick: number; population: number; food: number; wood: number; avgSatiety: number }[]; // capped
-}
+// Civilization stats (day, population, housed, food, wood, avgNeeds) are
+// DERIVED by selectors.getCivStats(), not stored, so they can never go stale.
+// The dashboard history series is added to state with the stats system (M7)
+// together with a schema migration.
 
 interface WorldConfig {
   seed: string;
@@ -319,7 +326,6 @@ interface WorldState {
   structures: Structure[];
   stockpile: { food: number; wood: number };
   events: SimEvent[];              // ring buffer, cap 200
-  stats: CivStats;
 }
 ```
 
@@ -434,7 +440,9 @@ little-worlds/
     │   ├── selectors.ts
     │   ├── events.ts                # pushEvent (ring buffer)
     │   ├── grid.ts                  # index/point helpers, neighbours, passability, cost
+    │   ├── ids.ts                   # allocateId (single shared id counter)
     │   ├── map/
+    │   │   ├── placeholder.ts       # M1 grass + water-border map, revealAround (replaced in M2)
     │   │   ├── noise.ts
     │   │   └── generate.ts
     │   ├── path/

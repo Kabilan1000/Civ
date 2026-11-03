@@ -36,6 +36,8 @@ describe('architecture: src/sim purity', () => {
     const violations: string[] = []
     for (const file of files) {
       readFileSync(file, 'utf8')
+        // blank out block comments but keep line numbers
+        .replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, ' '))
         .split('\n')
         .forEach((line, i) => {
           const code = line.replace(/\/\/.*$/, '') // ignore line comments
