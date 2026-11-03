@@ -418,7 +418,9 @@ little-worlds/
 ├── CLAUDE.md
 ├── docs/ARCHITECTURE.md
 ├── index.html
-├── package.json · tsconfig*.json · vite.config.ts   (vitest config inside)
+├── package.json · vite.config.ts (vitest config inside)
+├── tsconfig.json            # references app / sim / test / node projects
+├── tsconfig.sim.json        # src/sim checked with no DOM or Node types
 └── src/
     ├── main.tsx
     ├── sim/                         # pure, deterministic engine

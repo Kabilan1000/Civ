@@ -8,12 +8,13 @@ Full design: `docs/ARCHITECTURE.md` — read it before structural changes and ke
 ## Commands
 
 - `npm run dev` — dev server
-- `npm test` — Vitest (engine tests)
-- `npm run build` — typecheck + production build
+- `npm test` — Vitest (engine tests, Node environment)
+- `npm run build` — typecheck (`tsc -b`) + production build
+- `npm run typecheck` / `npm run lint` — types only / oxlint
 
 ## Architecture rules (non-negotiable)
 
-1. **`src/sim/` is pure TypeScript.** No imports from React, PixiJS, `app/`, `render/`, `ui/`, `persistence/`. No `window`, `document`, `localStorage`, `Math.random`, `Date`, `performance`, `crypto`. An architecture test enforces this.
+1. **`src/sim/` is pure TypeScript.** No imports from React, PixiJS, `app/`, `render/`, `ui/`, `persistence/`. No `window`, `document`, `localStorage`, `Math.random`, `Date`, `performance`, `crypto`. `tsconfig.sim.json` (no DOM/Node types) and `src/sim/__tests__/architecture.test.ts` enforce this.
 2. **Deterministic.** All randomness via `sim/rng.ts`; RNG state lives in `WorldState`. Same seed + same ticks ⇒ identical `serialize()` output. Iterate in stable order; break ties explicitly (score, then id/tile index). Avoid `Math.sin/cos/exp/pow` in sim logic.
 3. **Tick-based.** `step(state)` advances exactly one tick through the fixed system order in `world.ts`. No logic depends on real time.
 4. **State is plain JSON.** No classes, `Map`/`Set`, functions or cycles in `WorldState`. Reference entities by numeric id. Bump `schemaVersion` and add a migration when the shape changes.
