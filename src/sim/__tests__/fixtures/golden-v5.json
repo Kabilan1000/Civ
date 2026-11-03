@@ -1,0 +1,162 @@
+{
+  "description": "Pre-M10a golden serialize() hashes. M10a must reproduce every hash byte for byte; retired in M10b, where simulation behaviour changes on purpose.",
+  "schemaVersion": 5,
+  "sourceCommit": "aefbc178a2c10fbca44916da5a403e8d7cf7a42d",
+  "seeds": [
+    {
+      "seed": "little-worlds",
+      "tick0Map": "dc070644b52e153615d0131335b28869baf774e25cf45e0d7aa54b57b3544661",
+      "checkpoints": [
+        {
+          "tick": 0,
+          "sha256": "70004a573c2e99a302f58c07d673c92566e000b0b7aa1849a0a204a45ce0289f",
+          "bytes": 23127
+        },
+        {
+          "tick": 240,
+          "sha256": "3186ed95b5f72585f345303b4d9c793e86e0ae69e2d4686278198d970cefc58d",
+          "bytes": 38600
+        },
+        {
+          "tick": 2880,
+          "sha256": "c6b59b8af5fcf618414a41fccb617fc1664bb9da250cdca4a8f31e25a1c181f5",
+          "bytes": 76558
+        },
+        {
+          "tick": 11520,
+          "sha256": "b6f6f6cd34b9cee8f2a39090f084f9de885a68309e836faee44211262106be56",
+          "bytes": 139824
+        },
+        {
+          "tick": 28800,
+          "sha256": "61bde34ff26e6986e907676689dcd4d446ff32595f39c4c49f5357615dafb89c",
+          "bytes": 158712
+        }
+      ]
+    },
+    {
+      "seed": "m9-check",
+      "tick0Map": "ec8f06096f31f8eaa170be95881ac43c446ceeb82325333d86e4ce63828011ba",
+      "checkpoints": [
+        {
+          "tick": 0,
+          "sha256": "32aa2b3c12d5124203f44575a0ac108677a7cdc7e691509c37c7279303de7f6f",
+          "bytes": 23878
+        },
+        {
+          "tick": 240,
+          "sha256": "dfbfc8d5f000537f1085823cd18685c75bcb390b3e6f4e32913b87c469315e4e",
+          "bytes": 39355
+        },
+        {
+          "tick": 2880,
+          "sha256": "24a9c028310bedb179efb54358c303669d3d213d435420096ce35e09d4ed868c",
+          "bytes": 75803
+        },
+        {
+          "tick": 11520,
+          "sha256": "dc16e39ac275f0a0d06bd9ac4c75050ce84ce69bbcd43ff6bd7c6f846ffd34ca",
+          "bytes": 139267
+        },
+        {
+          "tick": 28800,
+          "sha256": "91fd3ebbe209d53bc35066d337ff9bb94468881b91d6af971df2cd8c6180206f",
+          "bytes": 158984
+        }
+      ]
+    },
+    {
+      "seed": "sweep-0",
+      "tick0Map": "048b806bd588236ec62f1ad40b45b9ec41a742b900aa9cf645861d59a469d779",
+      "checkpoints": [
+        {
+          "tick": 0,
+          "sha256": "ade802e7455aa598f80c5d386f58a4039dc7607d1e0fe05d630cf48de1c9f963",
+          "bytes": 23018
+        },
+        {
+          "tick": 240,
+          "sha256": "4c1dc416c03992429ac11ecc1cbfac4d7ccf56e8d3003e5133ebf6ff895fb1d3",
+          "bytes": 37798
+        },
+        {
+          "tick": 2880,
+          "sha256": "a4c37c3d4ea9dbca38d0075afc77c2d21585f9cf34380e6b0ff7fb16fba22647",
+          "bytes": 74558
+        },
+        {
+          "tick": 11520,
+          "sha256": "a9d5643640aabc88a433aafd4eb685894c8b7e39760f487b727b227482e1d5be",
+          "bytes": 137515
+        },
+        {
+          "tick": 28800,
+          "sha256": "4f14e412a632f2cdd6579475a1903611bd140d164004b69606d9f1495dabb912",
+          "bytes": 158063
+        }
+      ]
+    },
+    {
+      "seed": "sweep-13",
+      "tick0Map": "4b7ed6f1e91af93aa0a420e68c5ccc136cf48123570d901e08f1ccdfe8f81e4d",
+      "checkpoints": [
+        {
+          "tick": 0,
+          "sha256": "6fb56d8cfe27bfd643f54db49a797ea0a133e0046b60db66443a3a54062a82da",
+          "bytes": 23385
+        },
+        {
+          "tick": 240,
+          "sha256": "c022a4ab0ecf59b3e40e26cb2e58971e76cbdab46e5d86502d740371529983c6",
+          "bytes": 38354
+        },
+        {
+          "tick": 2880,
+          "sha256": "ffb323501952d74c21831ce76d8f91bcde112fa251fb9939ebb99a74a0a7f057",
+          "bytes": 75602
+        },
+        {
+          "tick": 11520,
+          "sha256": "4144c3f87619ba7f405b2e263e9830d5d07da0650f5bdcb2eff8af6001ee5c5d",
+          "bytes": 138415
+        },
+        {
+          "tick": 28800,
+          "sha256": "d06866b3afc0bd55c7824a6246114fc8cec6cf05d9e7eb990305b0b5ebb1c94f",
+          "bytes": 158371
+        }
+      ]
+    },
+    {
+      "seed": "golden-island",
+      "tick0Map": "b5025f030740491f96adc0fee4b0d85087374be5a5296cba31303c8cf8ddfa9d",
+      "checkpoints": [
+        {
+          "tick": 0,
+          "sha256": "b9e1727ba745905bd6d956be95f6fff9a0c5b59eedec205a2cacb33a94d64a6c",
+          "bytes": 23576
+        },
+        {
+          "tick": 240,
+          "sha256": "aef21b8c3f30d7a7e0b5c038f9ef496c7c9183302a24cbc3f7255bc5f0f795d5",
+          "bytes": 39220
+        },
+        {
+          "tick": 2880,
+          "sha256": "2c4132cc82c0b65e8064300f9ef08a65467e65bbf5aa7187990f6bd9491097e9",
+          "bytes": 75541
+        },
+        {
+          "tick": 11520,
+          "sha256": "d4ed455bd5ffa55983317ed442a207582fb687ee8bbcd6d15429f1aa8262a681",
+          "bytes": 138978
+        },
+        {
+          "tick": 28800,
+          "sha256": "869592b263db372651a92057b4ab97cdb8a541a79c9c4ed138bc1d560e4103bd",
+          "bytes": 158436
+        }
+      ]
+    }
+  ]
+}
