@@ -1,6 +1,5 @@
 import { performance } from 'node:perf_hooks'
 import { describe, expect, it } from 'vitest'
-import { ageYears } from '../citizens/life.ts'
 import { ARCHIVE_MAX, MAX_AGE, MAX_MEMORIES, MAX_OVERCROWD, MAX_POPULATION, SHELTER_CAPACITY, TICKS_PER_DAY, TICKS_PER_YEAR } from '../constants.ts'
 import { isAdjacent4, isPassable } from '../grid.ts'
 import { deserialize, serialize } from '../serialize.ts'
@@ -52,37 +51,42 @@ describe.skipIf(!RUN)('population sweep', () => {
       let idleStreak = 0
       const idle = new Map<number, number>()
       let simMs = 0
+      const bad: string[] = []
       for (let t = 1; t <= DAYS * TICKS_PER_DAY; t++) {
         const t0 = performance.now()
         step(s)
         simMs += performance.now() - t0
-        // ── hard gates, every tick ──
-        expect(conservationTotals(s)).toEqual(start)
+        // ── hard gates, every tick (collected cheaply, asserted once a day) ──
+        const totals = conservationTotals(s)
+        if (totals.food !== start.food || totals.wood !== start.wood) bad.push(`t${t}: conservation ${JSON.stringify(totals)} ≠ ${JSON.stringify(start)}`)
         const living = s.citizens.filter((c) => c.alive)
-        expect(living.length).toBeLessThanOrEqual(MAX_POPULATION)
+        if (living.length > MAX_POPULATION) bad.push(`t${t}: population ${living.length}`)
+        const byId = new Map(s.citizens.map((c) => [c.id, c]))
         for (const c of living) {
           const tile = c.pos.y * s.map.width + c.pos.x
-          expect(isPassable(s.map, tile)).toBe(true)
-          expect(s.map.discovered[tile]).toBe(1)
+          if (!isPassable(s.map, tile) || s.map.discovered[tile] !== 1) bad.push(`t${t}: ${c.name} on bad tile ${tile}`)
           if (c.pathIndex > 0 && c.path.length) {
             const prev = c.path[c.pathIndex - 1]!
             const p = { x: prev % s.map.width, y: Math.floor(prev / s.map.width) }
-            if (p.x !== c.pos.x || p.y !== c.pos.y) expect(isAdjacent4(p, c.pos)).toBe(true)
+            if ((p.x !== c.pos.x || p.y !== c.pos.y) && !isAdjacent4(p, c.pos)) bad.push(`t${t}: ${c.name} teleported`)
           }
-          for (const v of Object.values(c.needs)) expect(v >= 0 && v <= 100).toBe(true)
-          expect(c.memories.length).toBeLessThanOrEqual(MAX_MEMORIES)
-          expect(ageYears(c, s.tick)).toBeLessThanOrEqual(MAX_AGE)
-          if (ageYears(c, s.tick) < 14 && c.task) expect(CHILD_ACTIONS.has(c.task.kind)).toBe(true)
-          if (c.partnerId !== null) expect(s.citizens.find((o) => o.id === c.partnerId)?.partnerId).toBe(c.id)
+          const n = c.needs
+          if (!(n.satiety >= 0 && n.satiety <= 100 && n.energy >= 0 && n.energy <= 100 && n.social >= 0 && n.social <= 100 && n.health >= 0 && n.health <= 100)) bad.push(`t${t}: ${c.name} needs out of range`)
+          if (c.memories.length > MAX_MEMORIES) bad.push(`t${t}: ${c.name} memories`)
+          const age = Math.floor((s.tick - c.bornTick) / TICKS_PER_YEAR)
+          if (age > MAX_AGE) bad.push(`t${t}: ${c.name} aged ${age}`)
+          if (age < 14 && c.task && !CHILD_ACTIONS.has(c.task.kind)) bad.push(`t${t}: child ${c.name} doing ${c.task.kind}`)
+          if (c.partnerId !== null && byId.get(c.partnerId)?.partnerId !== c.id) bad.push(`t${t}: ${c.name} partner not mutual`)
           const streak = c.task ? 0 : (idle.get(c.id) ?? 0) + 1
           idle.set(c.id, streak)
-          idleStreak = Math.max(idleStreak, streak)
+          if (streak > idleStreak) idleStreak = streak
         }
-        for (const sh of s.structures) expect(sh.residentIds.length).toBeLessThanOrEqual(SHELTER_CAPACITY + MAX_OVERCROWD)
-        expect(s.archive.length).toBeLessThanOrEqual(ARCHIVE_MAX)
+        for (const sh of s.structures) if (sh.residentIds.length > SHELTER_CAPACITY + MAX_OVERCROWD) bad.push(`t${t}: shelter ${sh.id} holds ${sh.residentIds.length}`)
+        if (s.archive.length > ARCHIVE_MAX) bad.push(`t${t}: archive ${s.archive.length}`)
         if (t % TICKS_PER_DAY !== 0) continue
-        // ── daily bookkeeping ──
-        expect(plantViolations(s, false)).toEqual([])
+        // ── daily: assert everything collected, plus plant invariants ──
+        bad.push(...plantViolations(s, false))
+        expect(bad.slice(0, 5)).toEqual([])
         const day = t / TICKS_PER_DAY
         const c = s.population.counters
         if (first.partner < 0 && c.partnerships > 0) first.partner = day
