@@ -117,8 +117,8 @@ Each tick runs systems in a fixed order:
 7. **social** — resolve conversations between adjacent citizens.
 8. **stats** — sample civilization metrics (every 24 ticks) for the dashboard.
 
-Implemented so far (M3): `time → decide → act` (`systems/time.ts`,
-`systems/decide.ts`, `systems/tasks.ts`). The other systems slot into the
+Implemented so far (M4): `time → needs (incl. health) → resources → decide →
+act` (`systems/time.ts`, `needs.ts`, `resources.ts`, `decide.ts`, `tasks.ts`). The other systems slot into the
 positions above as their milestones land.
 
 ### 3.5 Map
@@ -135,16 +135,21 @@ positions above as their milestones land.
   rest grass. The outer border is always water.
 - **Campfire:** the grass tile closest to the map centre (Manhattan, ties by
   index) inside the largest connected land region, with at least
-  `citizenCount` reachable tiles within `SPAWN_RADIUS`.
-- **Resources:** berries (max 5) on 10% of grass, trees (max 8 wood) on 55% of
+  `citizenCount` spawn tiles within `SPAWN_RADIUS` in its **start region**.
+- **Start region:** tiles reachable from the campfire *without leaving the
+  starting discovery radius*, i.e. walkable on initially discovered tiles
+  only (citizens never walk in fog). Spawns and the guaranteed starting
+  food/wood must lie in it. (M4 fix: M2 used plain reachability, which let a
+  citizen spawn in a pocket connected to camp only through fog.)
+- **Resources:** berries (max 6) on 10% of grass, trees (max 8 wood) on 55% of
   forest, one RNG draw per grass/forest tile in index order. Regrowth comes with
   the resources system (M4).
 - **Validation & repair (deterministic):**
   1. Largest region < 30% of the map, or no valid campfire tile → next attempt
      (up to 12).
-  2. Fewer than 3 reachable berry / tree tiles inside the starting discovery
-     radius → plant berries on reachable grass, or turn reachable grass into
-     forest with a tree, in seeded order.
+  2. Fewer than 6 berry / 3 tree tiles in the start region → plant berries
+     on start-region grass, or turn start-region grass into forest with a
+     tree, in seeded order.
   3. All attempts fail → fallback: carve a grass clearing around the centre
      (border stays water). This always validates. If even that can't fit the
      citizens, `createWorld` throws a clear error.
@@ -186,45 +191,82 @@ positions above as their milestones land.
   Task phases: `moveTo → linger`.
 - Citizens may share tiles (no collision in MVP).
 
-### 3.7 Utility AI
+### 3.7 Needs (M4, `systems/needs.ts`)
 
-Each decision:
+All needs are 0..100, 100 = satisfied (the UI shows satiety inverted as
+"Hunger"), clamped every tick. Rates are per tick (`constants.ts`), balanced
+for a 240-tick day:
 
-1. Build candidate actions: `eat`, `forage`, `chop`, `build`, `rest`,
-   `socialize`, `explore`, `wander`.
-2. Each action scores in `[0, 1]` as the **product of considerations**, each a
-   response curve over an input (e.g. `1 - satiety/100`, distance to target,
-   night-time, stockpile shortage). Products are compensated for consideration
-   count so actions with more factors aren't penalised.
-3. Multiply by **role weight** (forager → forage, builder → build/chop,
-   explorer → explore) and **personality modifiers** (sociability → socialize,
-   diligence → work, curiosity → explore).
-4. Add **inertia** to the current action (hysteresis prevents flip-flopping) and
-   small seeded jitter for variety.
-5. Pick the highest score; ties by action order.
+| Need    | Change per tick | Per day / notes |
+| ------- | --------------- | --------------- |
+| satiety | −0.2 | −48/day → ≈2 food (25 satiety each) per citizen per day |
+| energy  | idle −0.2, walking −0.3, working −0.4, sleeping +0.8 | awake drain ≈50/day, refilled by ≈65 ticks (6.5 h) of sleep |
+| social  | −0.12 alone, +0.4 with someone within 2 tiles | social *actions* come in M6 |
+| health  | −0.15 at satiety 0, −0.1 at energy 0 (×(1 − 0.5·resilience)); +0.05 when satiety ≥ 40 and energy ≥ 25 | no death until M5 |
 
-Re-evaluation happens when a task completes or fails, every
-`DECISION_INTERVAL` ticks (staggered by citizen id), or immediately when a need
-drops below a critical threshold. Each action module exports
-`score(ctx)` and `start(ctx)`; the task executor advances its phases.
+Activity comes from the task phase: `sleep` → resting, `gather` → working,
+following a path → walking, otherwise idle.
 
-Tasks are serializable phase machines, e.g. forage:
-`moveTo(berryTile) → gather(n ticks) → moveTo(stockpile) → deposit`.
+### 3.8 Utility AI (M4, `ai/`)
 
-Debug: the last decision's top scores are stored on the citizen
-(`lastScores`) so the inspector can explain *why* a citizen is doing something.
+**When:** a citizen decides at `nextDecisionTick` — the tick after a task ends,
+otherwise every `DECISION_INTERVAL` (10) ticks while busy (staggered).
 
-### 3.8 Economy & construction
+**Context** (`ai/context.ts`, one BFS per decision): step distances over
+discovered tiles, campfire distance, nearest discovered, reachable, non-empty
+berry bush and tree *not targeted by another citizen*, nearest rest spot
+(within 2 of the campfire), night flag.
+
+**Scores** (each in [0, 1], `ai/actions/*`, curves in `ai/curves.ts`):
+
+| Action  | Score |
+| ------- | ----- |
+| eat     | `rising(hunger, 0.25, 0.85)` × access (1 if carrying berries, else distance factor to camp if stockpile has food; 0 = no food reachable). Starving (< 15) ignores distance. |
+| rest    | 0 if energy ≥ 90; else `rising(tiredness, 0.1, 0.8)` + night bonus 0.35 |
+| deliver | 0 if carrying nothing; else 0.25 + 0.55 × fullness (+0.1 if the village has no food) |
+| forage / chop | 0.5 × role × (0.8 + 0.4·diligence) × demand × distance factor × (1 − ½ fullness) × (½ at night). Demand rises from 0.15 with stockpile shortage (food: below 6 per citizen, or personal hunger; wood: below 40). |
+| wander  | (0.1 + 0.08·curiosity) × role (explorer 1.5) — fallback |
+
+Role weights: forager forage 1.3 / chop 0.5; builder forage 0.6 / chop 1.3;
+explorer forage 0.8 / chop 0.7. A seeded jitter ≤ 0.02 is added to every
+possible action (drawn in fixed order). Ties keep action order
+`eat, rest, deliver, forage, chop, wander`.
+
+**Hysteresis / intention persistence:** a running task is kept unless the best
+alternative beats the task's own current score by `SWITCH_MARGIN` (0.2). The
+margin is waived for eat when satiety < 15 and for rest when energy < 10.
+Interrupted citizens keep what they carry.
+
+**Explainability:** every decision stores all six scores, best first, in
+`citizen.lastScores`; the current intention is `citizen.task`.
+
+**Tasks** are serializable phase machines: `moveTo` (A*, discovered tiles
+only, planned once) → arrival phase (`ai/phases.ts`): `gather`, `deposit`,
+`eat`, `sleep` or `linger`. See `systems/tasks.ts`.
+
+### 3.9 Economy & construction
 
 - A **campfire/stockpile** is placed at spawn: the colony's shared food and
   wood store and the default social and sleeping spot.
-- Citizens carry one load at a time (`carrying`), deposited at the stockpile.
+- **Inventory:** one load kind at a time (`carrying`): up to 6 berries or 4
+  wood. Gathering takes 3 ticks per berry, 5 per wood; every unit taken bumps
+  `map.version`.
+- **Stockpile access:** depositing and eating from the stockpile only work
+  within Manhattan 1 of the campfire. Eating uses carried berries first, one
+  unit per 3 ticks, +25 satiety each, until satiety ≥ 90.
+- **Regrowth** (`systems/resources.ts`): every 48 ticks each bush below max
+  regrows 1 (5/day); every 480 ticks each tree regrows 1. Bushes hold 6,
+  trees 8. Depleted nodes stay (bare bush / stump) and regrow.
+- **Conservation:** all transfers move whole units, and `state.ledger`
+  counts gathered, regrown and eaten units so that, at every tick,
+  `map + carried + stockpile + eaten − regrown` is constant for food and
+  `map + carried + stockpile − regrown` for wood (tested every tick).
 - **Shelters**: when there are homeless citizens and stockpile wood ≥ cost, a
   builder places a construction site near the campfire, hauls wood and adds
   build progress. A complete shelter houses up to 3 citizens. Resting in a home
   restores energy faster than sleeping rough.
 
-### 3.9 Social: relationships & memory
+### 3.10 Social: relationships & memory
 
 - `relationships[otherId] = { affinity: -100..100, familiarity: 0..100,
   lastInteractionTick }`.
@@ -238,7 +280,7 @@ Debug: the last decision's top scores are stored on the citizen
   biases decisions (remembered resource tiles; avoiding disliked citizens) and
   is shown in the inspector. Oldest / least salient entries are evicted first.
 
-### 3.10 Events
+### 3.11 Events
 
 Structured events (`{ id, tick, kind, citizenIds, data }`) appended to a ring
 buffer (cap 200) in state. Text is formatted in the UI (`ui/format/`), keeping
@@ -403,11 +445,17 @@ UI-only state (selected citizen, open panels) lives in React, not in the sim.
 
 - 24 px tiles → an 864 × 576 world, scaled to fit the map element
   (`render/layout.ts`); a `ResizeObserver` resizes the renderer and re-fits.
-- Layers: **static map** (terrain + resources + fog drawn as Graphics
-  off-stage and baked into one texture), structures, citizens. The bake is
-  redone only when the map object, `map.version` or the display scale
-  changes, so a normal frame draws one quad for the island. **Sim rule:** any
-  change to terrain, resources or `discovered` must increment `map.version`.
+- Layers: **map** (terrain + fog drawn off-stage and baked into one texture;
+  re-baked only when terrain/`discovered` or the display scale change),
+  **resources** (`render/ResourceSprites.ts`: one 24 px sprite per bush/tree
+  sharing 12 pre-rendered depletion-level textures; a change just swaps a
+  texture), structures, citizens (with a cargo badge and dimmed while asleep).
+  **Sim rule:** any change to terrain, resources or `discovered` must
+  increment `map.version`; on a bump the renderer diffs terrain/`discovered`
+  against its copies to decide whether the map needs a re-bake.
+- Why sprites, not a baked resource layer: extra full-map transparent quads
+  multiplied fill cost on software-rendered GPUs (≈3× slower at DPR 2), and
+  re-baking on every gathered unit is wasteful at 10x.
 - Citizens never stand in fog (they walk discovered tiles only), so fog sits
   under them.
 - Pixi's own ticker is disabled (`autoStart: false`); the controller's loop
@@ -519,7 +567,10 @@ little-worlds/
     │   │   ├── memory.ts
     │   │   └── relationships.ts
     │   ├── ai/
-    │   │   ├── curves.ts            # response curves (M4)
+    │   │   ├── context.ts           # per-decision context (BFS, targets)
+    │   │   ├── phases.ts            # arrival phase per task kind
+    │   │   ├── travel.ts            # beginTask (A* over discovered tiles)
+    │   │   ├── curves.ts            # response curves
     │   │   ├── utility.ts           # scoring framework
     │   │   ├── decide.ts
     │   │   └── actions/             # one module per action: score + start + phases
@@ -527,14 +578,18 @@ little-worlds/
     │   │       └── rest.ts socialize.ts explore.ts wander.ts
     │   ├── systems/
     │   │   ├── time.ts  needs.ts  health.ts  resources.ts
-    │   │   ├── decide.ts            # M3: wander only; M4: utility AI
+    │   │   ├── decide.ts            # utility AI + hysteresis
+    │   │   ├── needs.ts             # needs decay/recovery
+    │   │   ├── resources.ts         # regrowth
     │   │   └── tasks.ts movement.ts social.ts stats.ts
     │   └── __tests__/               # cross-cutting tests (determinism, invariants, arch, perf)
     ├── app/
     │   ├── SimulationController.ts  # loop, speed, pause, snapshots
     │   └── useSimulation.ts         # React hook (useSyncExternalStore)
     ├── render/
-    │   ├── WorldRenderer.ts         # Pixi app, baked map, structures, citizens
+    │   ├── WorldRenderer.ts         # Pixi app, layers, structures, citizens
+    │   ├── BakedLayer.ts            # container → cached texture
+    │   ├── ResourceSprites.ts       # per-node sprites, depletion textures
     │   ├── AppLifecycle.ts          # async init/destroy guard
     │   ├── layout.ts                # fitWorld
     │   └── palette.ts

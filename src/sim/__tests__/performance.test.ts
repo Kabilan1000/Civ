@@ -3,10 +3,22 @@ import { describe, expect, it } from 'vitest'
 import { isPassable } from '../grid.ts'
 import { generateMap } from '../map/generate.ts'
 import { findPath } from '../path/astar.ts'
+import { createWorld, stepN } from '../world.ts'
 
 // Soft budgets with generous headroom for slow CI machines (docs/ARCHITECTURE.md §10).
 
 describe('performance', () => {
+  it('simulates 10 000 ticks (≈42 days) of the full colony AI in under 2 s', () => {
+    const s = createWorld({ seed: 'perf-sim' })
+    stepN(s, 200) // warm up
+    const t0 = performance.now()
+    stepN(s, 10_000)
+    const ms = performance.now() - t0
+    expect(ms).toBeLessThan(2000)
+    // Architecture budget: ≤ 1 ms per tick on average (10x speed = 50 ticks/s).
+    expect(ms / 10_000).toBeLessThan(1)
+  })
+
   it('generates a 36x24 map in well under 20 ms on average', () => {
     const t0 = performance.now()
     for (let i = 0; i < 50; i++) generateMap(`perf-${i}`, 36, 24, { spawnTiles: 12 })

@@ -7,7 +7,10 @@
 //   2. Terrain by elevation rank: lowest → water, then sand; highest → rock;
 //      the rest is forest (wettest share) or grass. The map border is water.
 //   3. Campfire: the grass tile closest to the centre, inside the largest
-//      connected land region, with enough reachable spawn tiles around it.
+//      connected land region, with enough spawn tiles in its start region.
+//      The START REGION is every tile reachable from the campfire while
+//      staying within START_DISCOVERY_RADIUS — i.e. walkable using only the
+//      initially discovered tiles, which is all citizens may walk on.
 //      If the region is too small or no tile qualifies → next attempt.
 //   4. Resources: berries on some grass, trees on most forest.
 //   5. Repair: guarantee reachable berries and trees inside the starting
@@ -155,7 +158,12 @@ function carveClearing(map: TileMap): void {
 
 // ── Campfire ────────────────────────────────────────────────────────────────
 
-/** Passable tiles within SPAWN_RADIUS (Manhattan) of `camp`, excluding it, reachable from it. */
+/** Tiles reachable from `camp` without leaving the starting discovery radius. */
+export function startRegion(map: TileMap, camp: TileIndex): Uint8Array {
+  return reachableMask(map, camp, (t) => withinRadius(map, camp, t, START_DISCOVERY_RADIUS))
+}
+
+/** Passable tiles within SPAWN_RADIUS (Manhattan) of `camp`, excluding it, inside `reachable`. */
 export function spawnCandidates(map: TileMap, camp: TileIndex, reachable: Uint8Array): TileIndex[] {
   const c = toPoint(camp, map.width)
   const result: TileIndex[] = []
@@ -178,9 +186,8 @@ function chooseCampTile(map: TileMap, spawnTiles: number, minRegion: number): Ti
   }
   candidates.sort((a, b) => manhattan(toPoint(a, map.width), center) - manhattan(toPoint(b, map.width), center) || a - b)
 
-  const reachable = reachableMask(map, candidates[0] ?? 0)
   for (const tile of candidates) {
-    if (spawnCandidates(map, tile, reachable).length >= spawnTiles) return tile
+    if (spawnCandidates(map, tile, startRegion(map, tile)).length >= spawnTiles) return tile
   }
   return null
 }
@@ -202,21 +209,23 @@ export function placeResources(map: TileMap, rng: RngState): void {
 }
 
 export interface StartArea {
+  /** Tiles reachable from camp over any land (the settlement's island region). */
   reachableTiles: number
-  /** Reachable tiles with each resource inside the starting discovery radius. */
+  /** Resource tiles in the start region (reachable over initially discovered tiles). */
   berryTiles: TileIndex[]
   treeTiles: TileIndex[]
 }
 
 export function analyzeStartArea(map: TileMap, campTile: TileIndex): StartArea {
   const reachable = reachableMask(map, campTile)
+  const region = startRegion(map, campTile)
   const berryTiles: TileIndex[] = []
   const treeTiles: TileIndex[] = []
   let reachableTiles = 0
   for (let i = 0; i < map.terrain.length; i++) {
     if (reachable[i] !== 1) continue
     reachableTiles++
-    if (i === campTile || !withinRadius(map, campTile, i, START_DISCOVERY_RADIUS)) continue
+    if (i === campTile || region[i] !== 1) continue
     const kind = map.resources[i]?.kind
     if (kind === 'berries') berryTiles.push(i)
     else if (kind === 'wood') treeTiles.push(i)
@@ -224,9 +233,9 @@ export function analyzeStartArea(map: TileMap, campTile: TileIndex): StartArea {
   return { reachableTiles, berryTiles, treeTiles }
 }
 
-/** Plant missing start resources on reachable tiles near camp. Returns how many were added. */
+/** Plant missing start resources inside the start region. Returns how many were added. */
 function ensureStartResources(map: TileMap, campTile: TileIndex, rng: RngState): number {
-  const reachable = reachableMask(map, campTile)
+  const reachable = startRegion(map, campTile)
   const { berryTiles, treeTiles } = analyzeStartArea(map, campTile)
   const free = (terrain: Terrain) =>
     shuffle(

@@ -55,6 +55,7 @@ export type ActionKind =
   | 'eat'
   | 'forage'
   | 'chop'
+  | 'deliver'
   | 'build'
   | 'rest'
   | 'socialize'
@@ -174,6 +175,20 @@ export interface Stockpile {
   wood: number
 }
 
+/**
+ * Cumulative resource accounting since world creation (all non-negative
+ * integers). Lets tests and the dashboard check conservation:
+ *   food on map + food carried + stockpile.food + foodEaten
+ *     = initial food + foodRegrown
+ */
+export interface Ledger {
+  foodGathered: number
+  woodGathered: number
+  foodRegrown: number
+  woodRegrown: number
+  foodEaten: number
+}
+
 export interface WorldConfig {
   seed: string
   width: number
@@ -194,6 +209,7 @@ export interface WorldState {
   citizens: Citizen[]
   structures: Structure[]
   stockpile: Stockpile
+  ledger: Ledger
   /** Oldest first; capped at MAX_EVENTS. */
   events: SimEvent[]
 }

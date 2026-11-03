@@ -53,6 +53,8 @@ export interface SimulationSnapshot {
   phase: DayPhase
   paused: boolean
   speed: Speed
+  food: number
+  wood: number
 }
 
 export class SimulationController {
@@ -187,6 +189,8 @@ export class SimulationController {
       phase: getDayPhase(this.world),
       paused: this.paused,
       speed: this.speed,
+      food: this.world.stockpile.food,
+      wood: this.world.stockpile.wood,
     }
   }
 

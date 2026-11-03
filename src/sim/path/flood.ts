@@ -2,11 +2,15 @@ import { isPassable, neighbors4 } from '../grid.ts'
 import type { TileIndex, TileMap } from '../types.ts'
 
 /**
- * Tiles reachable from `start` by 4-directional moves over passable terrain.
- * Returns a mask (1 = reachable) of length width * height; all zeros if
- * `start` is out of range or impassable.
+ * Tiles reachable from `start` by 4-directional moves over passable terrain
+ * (optionally restricted by `canEnter`). Returns a mask (1 = reachable) of
+ * length width * height; all zeros if `start` is out of range or impassable.
  */
-export function reachableMask(map: TileMap, start: TileIndex): Uint8Array {
+export function reachableMask(
+  map: TileMap,
+  start: TileIndex,
+  canEnter: (tile: TileIndex) => boolean = () => true,
+): Uint8Array {
   const mask = new Uint8Array(map.width * map.height)
   if (!isPassable(map, start)) return mask
   const stack: TileIndex[] = [start]
@@ -14,7 +18,7 @@ export function reachableMask(map: TileMap, start: TileIndex): Uint8Array {
   while (stack.length > 0) {
     const tile = stack.pop()!
     for (const n of neighbors4(map, tile)) {
-      if (mask[n] === 0 && isPassable(map, n)) {
+      if (mask[n] === 0 && isPassable(map, n) && canEnter(n)) {
         mask[n] = 1
         stack.push(n)
       }
@@ -49,4 +53,26 @@ export function labelRegions(map: TileMap): { labels: Int32Array; sizes: number[
     sizes.push(size)
   }
   return { labels, sizes }
+}
+
+/**
+ * Breadth-first step counts from `start` over passable tiles accepted by
+ * `canEnter` (start always counts as 0). -1 = unreachable. Ignores terrain
+ * cost; used for cheap "how far is it" scoring, while actual travel uses A*.
+ */
+export function distanceField(map: TileMap, start: TileIndex, canEnter: (tile: TileIndex) => boolean): Int32Array {
+  const dist = new Int32Array(map.width * map.height).fill(-1)
+  if (!isPassable(map, start)) return dist
+  dist[start] = 0
+  const queue: TileIndex[] = [start]
+  for (let head = 0; head < queue.length; head++) {
+    const tile = queue[head]!
+    for (const n of neighbors4(map, tile)) {
+      if (dist[n] === -1 && isPassable(map, n) && canEnter(n)) {
+        dist[n] = dist[tile]! + 1
+        queue.push(n)
+      }
+    }
+  }
+  return dist
 }

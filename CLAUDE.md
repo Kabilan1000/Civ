@@ -19,13 +19,14 @@ Full design: `docs/ARCHITECTURE.md` — read it before structural changes and ke
 3. **Tick-based.** `step(state)` advances exactly one tick through the fixed system order in `world.ts`. No logic depends on real time. Tick 0 = day 1, 06:00; `step` increments `tick` first; day N starts at tick `(N-1)*240` (see `sim/systems/time.ts`).
 4. **State is plain JSON.** No classes, `Map`/`Set`, functions or cycles in `WorldState`. Reference entities by numeric id. Bump `schemaVersion` and add a migration when the shape changes.
 5. **No teleporting.** Citizens move one 4-neighbour tile at a time along A* paths, with per-terrain step costs.
-6. **Utility AI.** Each action in `sim/ai/actions/` exports scoring + task start; decisions are products of response curves × role × personality, with inertia. Store `lastScores` for the inspector.
+6. **Utility AI.** Each action in `sim/ai/actions/` exports `score(ctx)` + `start(ctx)`; scores combine response curves × role × personality × demand × distance. Keep intention persistence (`SWITCH_MARGIN`) and store `lastScores` for the inspector.
 7. **One-way data flow.** Renderer and UI read state; only `SimulationController` calls `step`, restart and load. UI-only state (selection, panels) stays in React.
 8. **No external AI/network calls** in the MVP.
 9. **Tuning numbers live in `sim/constants.ts`**, not inline.
 10. **Event text is formatted in the UI**; sim events are structured data.
 11. **Bump `map.version`** whenever terrain, resources or `discovered` change — the renderer only re-bakes the map when it does.
 12. **Other layers import the sim only via `src/sim/index.ts`.** `render/` never imports React. One rAF loop (the `SimulationController`) drives simulation and rendering.
+13. **Resources are conserved.** Move whole units only and record gathering, regrowth and eating in `state.ledger`; the conservation test checks every tick. Citizens act only on discovered, reachable tiles.
 
 ## Working style
 

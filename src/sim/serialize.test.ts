@@ -31,6 +31,24 @@ describe('serialize / deserialize', () => {
     expect(serialize(restored)).toBe(json)
   })
 
+  it('migrates a v1 save (no ledger) to the current schema and keeps running', () => {
+    const s = createWorld({ seed: 'migrate' })
+    stepN(s, 200)
+    const v1 = JSON.parse(serialize(s))
+    delete v1.ledger
+    v1.schemaVersion = 1
+    const loaded = deserialize(JSON.stringify(v1))
+    expect(loaded.schemaVersion).toBe(SCHEMA_VERSION)
+    expect(loaded.ledger).toEqual({ foodGathered: 0, woodGathered: 0, foodRegrown: 0, woodRegrown: 0, foodEaten: 0 })
+    expect(loaded.citizens).toEqual(s.citizens)
+    stepN(loaded, 200)
+    expect(loaded.tick).toBe(400)
+  })
+
+  it('rejects a current-version save that is missing the ledger', () => {
+    expectSaveError(() => deserialize(corrupt((r) => delete r.ledger)), 'invalid-data', /ledger/)
+  })
+
   it('rejects invalid JSON', () => {
     expectSaveError(() => deserialize('{not json'), 'invalid-json')
     expectSaveError(() => deserialize('[]'), 'invalid-data')
@@ -62,6 +80,8 @@ describe('serialize / deserialize', () => {
     ['id beyond nextId', (r: any) => (r.nextId = 2), /id/],
     ['structure', (r: any) => delete r.structures[0].kind, /structures\[0\]\.kind/],
     ['stockpile', (r: any) => (r.stockpile.food = -5), /stockpile\.food/],
+    ['ledger', (r: any) => (r.ledger.foodEaten = -1), /ledger\.foodEaten/],
+    ['task kind', (r: any) => (r.citizens[0].task = { kind: 'dance', phase: 'x', targetTile: null, targetId: null, ticksLeft: 0, startedTick: 0 }), /citizens\[0\]\.task\.kind/],
     ['event kind', (r: any) => (r.events[0].kind = 'party'), /events\[0\]\.kind/],
     ['event from the future', (r: any) => (r.events[0].tick = 10), /events\[0\]\.tick/],
     ['too many events', (r: any) => (r.events = Array.from({ length: 201 }, () => r.events[0])), /events/],

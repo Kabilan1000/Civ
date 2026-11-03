@@ -24,6 +24,7 @@ export const COLORS = {
   canopy: 0x2b5a28,
   canopyLight: 0x3f7a37,
   bush: 0x4c8a37,
+  bushBare: 0x6b7f4a,
   berry: 0xd9475a,
   log: 0x7a4f2a,
   flame: 0xf59e2b,

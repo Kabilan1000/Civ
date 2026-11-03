@@ -17,11 +17,18 @@ export class SaveError extends Error {
 }
 
 /**
- * migrations[v] upgrades raw data from schema v to v + 1.
- * Empty until the schema first changes.
+ * migrations[v] upgrades raw data from schema v to v + 1. Each migration
+ * only adds or reshapes fields; validation runs after the last one.
  */
 type Migration = (data: Record<string, unknown>) => Record<string, unknown>
-const migrations: Record<number, Migration> = {}
+const migrations: Record<number, Migration> = {
+  // v1 → v2 (M4): add the resource ledger. Older worlds start counting from 0,
+  // so conservation checks hold from the moment they are loaded.
+  1: (data) => ({
+    ...data,
+    ledger: { foodGathered: 0, woodGathered: 0, foodRegrown: 0, woodRegrown: 0, foodEaten: 0 },
+  }),
+}
 
 export function serialize(state: WorldState): string {
   return JSON.stringify(state)
@@ -105,7 +112,7 @@ function nullable<T>(v: unknown, path: string, check: (v: unknown, path: string)
 }
 
 const RESOURCE_KINDS = ['berries', 'wood'] as const
-const ACTION_KINDS = ['eat', 'forage', 'chop', 'build', 'rest', 'socialize', 'explore', 'wander', 'idle'] as const
+const ACTION_KINDS = ['eat', 'forage', 'chop', 'deliver', 'build', 'rest', 'socialize', 'explore', 'wander', 'idle'] as const
 const STRUCTURE_KINDS = ['campfire', 'shelter'] as const
 const MEMORY_KINDS = [
   'foundResource', 'resourceDepleted', 'chat', 'argument',
@@ -243,6 +250,10 @@ function validateWorld(d: Record<string, unknown>): asserts d is Record<string, 
   const stock = obj(d.stockpile, 'stockpile')
   num(stock.food, 'stockpile.food', 0)
   num(stock.wood, 'stockpile.wood', 0)
+  const ledger = obj(d.ledger, 'ledger')
+  for (const k of ['foodGathered', 'woodGathered', 'foodRegrown', 'woodRegrown', 'foodEaten']) {
+    int(ledger[k], `ledger.${k}`, 0)
+  }
 
   // Events
   const events = arr(d.events, 'events')

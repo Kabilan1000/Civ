@@ -19,7 +19,11 @@ export default function App() {
 
         <aside className="sidebar">
           <Panel title="Civilization">
-            {citizenCount} citizens wander the island. Dashboard arrives in M7.
+            <span data-testid="stockpile">
+              {citizenCount} citizens · Food {snapshot.food} · Wood {snapshot.wood}
+            </span>
+            <br />
+            Full dashboard arrives in M7.
           </Panel>
           <Panel title="Citizen">Citizen inspector arrives in M7.</Panel>
           <Panel title="Events">Event feed arrives in M7.</Panel>

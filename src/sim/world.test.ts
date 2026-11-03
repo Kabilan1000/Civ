@@ -103,7 +103,8 @@ describe('createWorld', () => {
         const t = toIndex(c.pos.x, c.pos.y, w.map.width)
         expect(isPassable(w.map, t)).toBe(true)
         expect(t).not.toBe(campTile)
-        expect(findPath(w.map, campTile, t)).not.toBeNull()
+        // Reachable over discovered tiles only — the only tiles citizens may walk.
+        expect(findPath(w.map, campTile, t, { canEnter: (x) => w.map.discovered[x] === 1 })).not.toBeNull()
       }
       const start = analyzeStartArea(w.map, campTile)
       for (const tile of [...start.berryTiles, ...start.treeTiles]) expect(w.map.discovered[tile]).toBe(1)

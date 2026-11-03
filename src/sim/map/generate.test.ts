@@ -35,9 +35,11 @@ function expectValidMap(map: TileMap, campTile: number) {
   // Reachable food and wood inside the starting discovery radius.
   expect(start.berryTiles.length).toBeGreaterThanOrEqual(MIN_START_BERRY_TILES)
   expect(start.treeTiles.length).toBeGreaterThanOrEqual(MIN_START_TREE_TILES)
+  // Reachable while walking only on initially discovered tiles (the start region).
+  const inStartArea = (t: number) => withinRadius(map, campTile, t, START_DISCOVERY_RADIUS)
   for (const tile of [...start.berryTiles, ...start.treeTiles]) {
-    expect(withinRadius(map, campTile, tile, START_DISCOVERY_RADIUS)).toBe(true)
-    expect(findPath(map, campTile, tile)).not.toBeNull()
+    expect(inStartArea(tile)).toBe(true)
+    expect(findPath(map, campTile, tile, { canEnter: inStartArea })).not.toBeNull()
   }
 
   // Resources only on suitable terrain, with sane non-negative amounts.

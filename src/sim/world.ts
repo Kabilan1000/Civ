@@ -7,6 +7,8 @@ import { revealAround } from './map/discovery.ts'
 import { generateMap } from './map/generate.ts'
 import { seedRng } from './rng.ts'
 import { decide } from './systems/decide.ts'
+import { updateNeeds } from './systems/needs.ts'
+import { regrowResources } from './systems/resources.ts'
 import { advanceTasks } from './systems/tasks.ts'
 import { advanceTime } from './systems/time.ts'
 import type { Structure, TileIndex, WorldConfig, WorldState } from './types.ts'
@@ -47,6 +49,7 @@ export function createWorld(overrides: Partial<WorldConfig> = {}): WorldState {
     citizens: [],
     structures: [],
     stockpile: { ...INITIAL_STOCKPILE },
+    ledger: { foodGathered: 0, woodGathered: 0, foodRegrown: 0, woodRegrown: 0, foodEaten: 0 },
     events: [],
   }
 
@@ -62,11 +65,14 @@ export function createWorld(overrides: Partial<WorldConfig> = {}): WorldState {
 
 /**
  * Advance the world by exactly one tick, mutating it in place.
- * System order is fixed (see docs/ARCHITECTURE.md §3.4). Needs, health and
- * resources (M4+) slot in between time and decide; social and stats after act.
+ * System order is fixed (see docs/ARCHITECTURE.md §3.4):
+ * time → needs (incl. health) → resources → decide → act.
+ * Social and stats systems (M6/M7) will follow act.
  */
 export function step(state: WorldState): void {
   advanceTime(state)
+  updateNeeds(state)
+  regrowResources(state)
   decide(state)
   advanceTasks(state)
 }
