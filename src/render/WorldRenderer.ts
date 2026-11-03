@@ -27,6 +27,9 @@
 // The Pixi ticker is disabled: the SimulationController's single
 // requestAnimationFrame loop calls render().
 
+// CSP-safe: replaces PixiJS's eval-based shader/uniform code generation, so the
+// renderer also runs on hosts whose Content-Security-Policy forbids 'unsafe-eval'.
+import 'pixi.js/unsafe-eval'
 import { Application, Container, Graphics } from 'pixi.js'
 import {
   MINUTES_PER_TICK,
