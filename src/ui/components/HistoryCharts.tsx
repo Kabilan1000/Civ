@@ -41,6 +41,11 @@ export const HistoryCharts = memo(function HistoryCharts({ controller, historyLe
       energy: h.map((s) => s.energy),
       health: h.map((s) => s.health),
       social: h.map((s) => s.social),
+      // Population V1 fields: null for samples recorded before the save reached schema v7.
+      children: h.map((s) => s.children ?? null),
+      elders: h.map((s) => s.elders ?? null),
+      births: h.map((s) => s.births ?? null),
+      deaths: h.map((s) => s.deaths ?? null),
     }
   }, [state, historyLength])
 
@@ -92,7 +97,24 @@ export const HistoryCharts = memo(function HistoryCharts({ controller, historyLe
         </div>
       ) : (
         <div className="charts">
-          <LineChart title="Population" {...common} series={[{ label: 'Living', color: S1, values: data.population }, { label: 'Housed', color: S2, values: data.housed }]} />
+          <LineChart
+            title="Population"
+            {...common}
+            series={[
+              { label: 'Living', color: S1, values: data.population },
+              { label: 'Housed', color: S2, values: data.housed },
+              { label: 'Children', color: S3, values: data.children },
+              { label: 'Elders', color: S4, values: data.elders },
+            ]}
+          />
+          <LineChart
+            title="Births & deaths"
+            {...common}
+            series={[
+              { label: 'Births', color: S3, values: data.births },
+              { label: 'Deaths', color: S2, values: data.deaths },
+            ]}
+          />
           <LineChart title="Stockpile" {...common} series={[{ label: 'Food', color: S1, values: data.food }, { label: 'Wood', color: S2, values: data.wood }]} />
           <LineChart title="Explored" {...common} yMax={100} unit="%" series={[{ label: 'Map discovered', color: S1, values: data.explored }]} />
           <LineChart

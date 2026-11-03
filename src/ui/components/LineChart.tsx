@@ -1,11 +1,19 @@
 import { useState, type PointerEvent } from 'react'
 import { layoutMarkers } from '../format/calendar.ts'
+import { segments } from '../format/chart.ts'
 
 export interface Series {
   label: string
   /** CSS colour (a categorical slot variable). */
   color: string
-  values: number[]
+  /** One per sample; null = not recorded (e.g. before a save gained this field) — drawn as a gap. */
+  values: (number | null)[]
+}
+
+const show = (v: number | null | undefined, unit: string) => (v === null || v === undefined ? '—' : `${v}${unit}`)
+const lastValue = (values: readonly (number | null)[]) => {
+  for (let i = values.length - 1; i >= 0; i--) if (values[i] !== null) return values[i]
+  return null
 }
 
 interface Props {
@@ -40,7 +48,7 @@ function niceMax(v: number): number {
 export function LineChart({ title, ticks, series, yMax, unit = '', formatX, formatTooltip = formatX, markers = [] }: Props) {
   const [hover, setHover] = useState<number | null>(null)
   const n = ticks.length
-  const max = yMax ?? niceMax(Math.max(1, ...series.flatMap((s) => s.values)))
+  const max = yMax ?? niceMax(Math.max(1, ...series.flatMap((s) => s.values.filter((v): v is number => v !== null))))
   const iw = W - M.left - M.right
   const ih = H - M.top - M.bottom
   const x = (i: number) => M.left + (n <= 1 ? iw / 2 : (i / (n - 1)) * iw)
@@ -67,13 +75,13 @@ export function LineChart({ title, ticks, series, yMax, unit = '', formatX, form
             <span key={s.label} className="legend-item">
               <span className="swatch" style={{ background: s.color }} aria-hidden />
               {s.label}
-              {n > 0 && <span className="num legend-value">{s.values[shown]}{unit}</span>}
+              {n > 0 && <span className="num legend-value">{show(s.values[shown], unit)}</span>}
             </span>
           ))}
         </span>
       </figcaption>
       <div className="chart-plot">
-        <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`${title}: ${series.map((s) => `${s.label} ${s.values.at(-1) ?? '—'}${unit}`).join(', ')}${seasonsText}`} onPointerMove={onMove} onPointerLeave={() => setHover(null)}>
+        <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`${title}: ${series.map((s) => `${s.label} ${show(lastValue(s.values), unit)}`).join(', ')}${seasonsText}`} onPointerMove={onMove} onPointerLeave={() => setHover(null)}>
           {gridValues.map((g) => (
             <g key={g}>
               <line x1={M.left} x2={W - M.right} y1={y(g)} y2={y(g)} className="grid" />
@@ -99,10 +107,10 @@ export function LineChart({ title, ticks, series, yMax, unit = '', formatX, form
               <text x={W - M.right} y={H - 4} className="axis-label" textAnchor="end">{formatX(ticks[n - 1]!)}</text>
             </>
           )}
-          {series.map((s) => (
+          {series.flatMap((s) => segments(s.values).map((run) => (
             <polyline
-              key={s.label}
-              points={s.values.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' ')}
+              key={`${s.label}-${run[0]}`}
+              points={run.map((i) => `${x(i).toFixed(1)},${y(s.values[i]!).toFixed(1)}`).join(' ')}
               fill="none"
               stroke={s.color}
               strokeWidth={2}
@@ -110,11 +118,11 @@ export function LineChart({ title, ticks, series, yMax, unit = '', formatX, form
               strokeLinecap="round"
               vectorEffect="non-scaling-stroke"
             />
-          ))}
+          )))}
           {hover !== null && (
             <g>
               <line x1={x(hover)} x2={x(hover)} y1={M.top} y2={M.top + ih} className="crosshair" />
-              {series.map((s) => (
+              {series.map((s) => s.values[hover] === null ? null : (
                 <circle key={s.label} cx={x(hover)} cy={y(s.values[hover]!)} r={4} fill={s.color} className="marker" />
               ))}
             </g>
@@ -127,7 +135,7 @@ export function LineChart({ title, ticks, series, yMax, unit = '', formatX, form
               <div key={s.label} className="tooltip-row">
                 <span className="swatch" style={{ background: s.color }} aria-hidden />
                 <span>{s.label}</span>
-                <span className="num">{s.values[hover]}{unit}</span>
+                <span className="num">{show(s.values[hover], unit)}</span>
               </div>
             ))}
           </div>

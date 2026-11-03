@@ -40,6 +40,7 @@ export const COLORS = {
   bubbleArgue: 0xff5a4f,
   bubbleShare: 0xff9ecb,
   shadow: 0x000000,
+  elder: 0xf2efe6,
 } as const
 
 /** Multiply an RGB colour's channels by `factor` (render-only, not simulation). */

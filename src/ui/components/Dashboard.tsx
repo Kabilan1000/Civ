@@ -1,4 +1,5 @@
 import type { SimulationSnapshot } from '../../app/SimulationController.ts'
+import { ADULT_AGE, ELDER_AGE, MAX_POPULATION } from '../../sim/index.ts'
 import { calendarHint, formatDate } from '../format/calendar.ts'
 import { Meter } from './Meter.tsx'
 
@@ -27,7 +28,12 @@ export function Dashboard({ snapshot }: { snapshot: SimulationSnapshot }) {
         </span>
       </div>
       <div className="stat-grid">
-        <Stat label="Population" value={s.population} sub={s.dead > 0 ? `${s.dead} died` : 'all alive'} hint="Living citizens (the dead are not counted)" />
+        <Stat
+          label="Population"
+          value={s.population}
+          sub={`${s.people.children} children${s.dead > 0 ? ` · ${s.dead} died` : ''}`}
+          hint={`Living citizens (the dead are not counted). The village holds at most ${MAX_POPULATION}.`}
+        />
         <Stat label="Food" value={s.food} sub="in stockpile" hint="Food units in the campfire stockpile" />
         <Stat label="Wood" value={s.wood} sub="in stockpile" hint="Wood units in the campfire stockpile (shelter sites hold their own)" />
         <Stat
@@ -38,6 +44,19 @@ export function Dashboard({ snapshot }: { snapshot: SimulationSnapshot }) {
         />
         <Stat label="Explored" value={`${s.exploredPercent.toFixed(0)}%`} sub={`${s.discoveredTiles} of ${s.totalTiles} tiles`} hint="Share of the map that has been discovered" />
         <Stat label="Bonds" value={`${s.friendships} · ${s.rivalries}`} sub="friends · rivals" hint="Friendships: both like each other (affinity ≥ 50). Rivalries: either resents the other (≤ −40)." />
+        <Stat
+          label="Ages"
+          value={`${s.people.children} · ${s.people.adults} · ${s.people.elders}`}
+          sub="children · adults · elders"
+          hint={`Children are under ${ADULT_AGE}, elders ${ELDER_AGE} or older (in world years of 48 days).`}
+        />
+        <Stat label="Couples" value={s.people.couples} sub="partnerships" hint="Living partners. Couples with a home and enough food in the village may have children." />
+        <Stat
+          label="Births · deaths"
+          value={`${s.people.births} · ${s.people.deaths}`}
+          sub={s.people.oldAgeDeaths > 0 ? `${s.people.oldAgeDeaths} of old age` : 'since founding'}
+          hint="Every birth and death since the village was founded (or since this save was upgraded)."
+        />
       </div>
       <div className="meters" aria-label="Average needs of the living">
         <Meter label="Satiety" value={s.avgNeeds.satiety} hint="Average satiety (100 = full; hunger is the inverse)" />

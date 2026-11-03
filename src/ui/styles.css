@@ -34,6 +34,7 @@
   --cat-exploration: #5bc0de;
   --cat-survival: #e0635d;
   --cat-time: #8b95a3;
+  --cat-family: #9fd17a;
 
   color-scheme: dark;
   font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
@@ -211,7 +212,7 @@ button { font: inherit; color: inherit; }
 .cat-dot { width: 8px; height: 8px; border-radius: 50%; align-self: center; background: var(--cat); }
 .cat-social { --cat: var(--cat-social); } .cat-construction { --cat: var(--cat-construction); }
 .cat-exploration { --cat: var(--cat-exploration); } .cat-survival { --cat: var(--cat-survival); }
-.cat-time { --cat: var(--cat-time); }
+.cat-time { --cat: var(--cat-time); } .cat-family { --cat: var(--cat-family); }
 .event-time { color: var(--muted); font-size: 0.75rem; white-space: nowrap; }
 /* Season separator rows (M10a): derived from event ticks, not stored events. */
 .events li.season-sep {

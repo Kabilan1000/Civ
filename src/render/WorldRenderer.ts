@@ -41,6 +41,8 @@ import {
   type Terrain,
   type TileMap,
   type WorldState,
+  lifeStage,
+  type LifeStage,
 } from '../sim/index.ts'
 import type { FrameRenderer } from '../app/SimulationController.ts'
 import { AppLifecycle } from './AppLifecycle.ts'
@@ -53,11 +55,16 @@ import { pickCitizen, screenToWorld, type RenderedCitizen } from './selection.ts
 import { WorldChangeTracker } from './worldChange.ts'
 import { COLORS, ROLE_COLORS, TERRAIN_COLORS, TILE_SIZE, shade, tileNoise } from './palette.ts'
 
+/** Children are drawn at this scale (Population V1). */
+const CHILD_SCALE = 0.65
+
 interface CitizenView {
   root: Container
   body: Graphics
   cargo: Graphics
   bubble: Graphics
+  elderMark: Graphics
+  stage: LifeStage | null
   cargoKind: 'berries' | 'wood' | null
   asleep: boolean
   bubbleTint: number | null
@@ -442,9 +449,12 @@ export class WorldRenderer implements FrameRenderer {
       .poly([-6, -11, -4, -11, -6, -9])
       .fill(0xffffff)
     bubble.visible = false
-    root.addChild(shadow, body, cargo, bubble)
+    // Elders: a small pale crown mark (Population V1).
+    const elderMark = new Graphics().circle(0, -6.5, 2.2).fill(COLORS.elder).stroke({ width: 1, color: COLORS.outline, alpha: 0.7 })
+    elderMark.visible = false
+    root.addChild(shadow, body, elderMark, cargo, bubble)
     root.label = `citizen-${c.id}`
-    return { root, body, cargo, bubble, cargoKind: null, asleep: false, bubbleTint: null }
+    return { root, body, cargo, bubble, elderMark, stage: null, cargoKind: null, asleep: false, bubbleTint: null }
   }
 
   private updateCitizens(state: WorldState, alpha: number): void {
@@ -459,6 +469,12 @@ export class WorldRenderer implements FrameRenderer {
         view = this.createCitizenView(c)
         this.citizenViews.set(c.id, view)
         this.citizens.addChild(view.root)
+      }
+      const stage = lifeStage(c, state.tick)
+      if (stage !== view.stage) {
+        view.stage = stage
+        view.root.scale.set(stage === 'child' ? CHILD_SCALE : 1) // children are drawn smaller
+        view.elderMark.visible = stage === 'elder'
       }
       const p = getVisualPosition(state, c, alpha)
       const px = p.x * TILE_SIZE + TILE_SIZE / 2

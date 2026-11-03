@@ -1,13 +1,16 @@
 import { useState } from 'react'
 import type { SimulationController, SimulationSnapshot } from '../../app/SimulationController.ts'
 import {
+  ADULT_AGE,
   explainDecision,
+  getPersonName,
   getCitizenDetail,
   getMemories,
   getRelationships,
   type CitizenDetail,
   type WorldState,
 } from '../../sim/index.ts'
+import { formatCalendarTick } from '../format/calendar.ts'
 import { ACTION_LABELS, MEMORY_LABELS, PHASE_LABELS, explainText, formatTick } from '../format/text.ts'
 import { CitizenLink } from './CitizenLink.tsx'
 import { Meter } from './Meter.tsx'
@@ -21,6 +24,23 @@ const TABS: { id: Tab; label: string }[] = [
 ]
 
 const ROLE_LABEL = { forager: 'Forager', builder: 'Builder', explorer: 'Explorer' } as const
+const STAGE_LABEL = { child: 'Child', adult: 'Adult', elder: 'Elder' } as const
+const CAUSE_LABEL = { starvation: 'starvation', exhaustion: 'exhaustion', oldAge: 'old age' } as const
+
+/** A family member: a link while they are still listed (living or recently dead), plain text once archived. */
+function Person({ p, onSelect }: { p: { id: number; name: string; listed: boolean }; onSelect: (id: number) => void }) {
+  return p.listed ? <CitizenLink id={p.id} name={p.name} onSelect={onSelect} /> : <span className="muted">{p.name}</span>
+}
+
+function joinPeople(list: { id: number; name: string; listed: boolean; alive?: boolean }[], onSelect: (id: number) => void) {
+  return list.map((p, i) => (
+    <span key={p.id}>
+      <Person p={p} onSelect={onSelect} />
+      {p.alive === false && <span className="muted small"> †</span>}
+      {i < list.length - 1 ? ', ' : ''}
+    </span>
+  ))
+}
 
 interface Props {
   controller: SimulationController
@@ -59,11 +79,11 @@ export function Inspector({ controller, snapshot, selectedId, onSelect }: Props)
         <div>
           <h2 className="citizen-name">{detail.name}</h2>
           <div className="muted">
-            {ROLE_LABEL[detail.role]} ·{' '}
+            {detail.stage === 'child' ? `Child, ${detail.age}` : `${ROLE_LABEL[detail.role]} · ${STAGE_LABEL[detail.stage]}, ${detail.age}`} ·{' '}
             {detail.alive ? (
               'alive'
             ) : (
-              <span className="deceased">deceased — {detail.deathCause} ({formatTick(detail.diedTick ?? 0)})</span>
+              <span className="deceased">deceased — {CAUSE_LABEL[detail.deathCause ?? 'starvation']} ({formatTick(detail.diedTick ?? 0)})</span>
             )}
           </div>
         </div>
@@ -143,6 +163,21 @@ function Overview({ detail: d, onSelect }: { detail: CitizenDetail; onSelect: (i
           )}
         </dd>
       </dl>
+      <h3>Family</h3>
+      <dl className="facts">
+        <dt>Age</dt>
+        <dd>
+          {d.age} <span className="muted small">({STAGE_LABEL[d.stage].toLowerCase()}{d.stage === 'child' ? `; will work as a ${ROLE_LABEL[d.role].toLowerCase()} from ${ADULT_AGE}` : ''})</span>
+        </dd>
+        <dt>Born</dt>
+        <dd>{d.founder ? <span className="muted">a founder of the village</span> : <span title={formatCalendarTick(d.bornTick)}>{formatTick(d.bornTick)}</span>}</dd>
+        <dt>Parents</dt>
+        <dd>{d.parents.length ? joinPeople(d.parents, onSelect) : <span className="muted">—</span>}</dd>
+        <dt>Partner</dt>
+        <dd>{d.partner ? <Person p={d.partner} onSelect={onSelect} /> : <span className="muted">none</span>}</dd>
+        <dt>Children</dt>
+        <dd>{d.children.length ? joinPeople(d.children, onSelect) : <span className="muted">none</span>}</dd>
+      </dl>
       <h3>Personality</h3>
       <div className="traits">
         {(Object.entries(d.personality) as [keyof typeof d.personality, number][]).map(([k, v]) => (
@@ -159,7 +194,7 @@ function Overview({ detail: d, onSelect }: { detail: CitizenDetail; onSelect: (i
 
 function Decision({ state, detail }: { state: WorldState; detail: CitizenDetail }) {
   const why = explainDecision(state, detail.id)!
-  const nameOf = (id: number) => state.citizens.find((c) => c.id === id)?.name ?? `#${id}`
+  const nameOf = (id: number) => getPersonName(state, id)
   const max = Math.max(0.0001, ...detail.scores.map((s) => s.score))
   return (
     <>
