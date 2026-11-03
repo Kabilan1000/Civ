@@ -10,14 +10,18 @@ export function withinRadius(map: TileMap, center: TileIndex, tile: TileIndex, r
   return dx * dx + dy * dy <= radius * radius
 }
 
-/** Mark every tile within a euclidean radius of `center` as discovered. */
-export function revealAround(map: TileMap, center: TileIndex, radius: number): void {
-  let changed = false
+/**
+ * Mark every tile within a euclidean radius of `center` as discovered.
+ * Bumps map.version if anything changed. Returns how many tiles were new.
+ */
+export function revealAround(map: TileMap, center: TileIndex, radius: number): number {
+  let revealed = 0
   for (let i = 0; i < map.terrain.length; i++) {
     if (map.discovered[i] === 0 && withinRadius(map, center, i, radius)) {
       map.discovered[i] = 1
-      changed = true
+      revealed++
     }
   }
-  if (changed) map.version++
+  if (revealed > 0) map.version++
+  return revealed
 }

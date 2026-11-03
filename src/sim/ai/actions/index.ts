@@ -3,6 +3,9 @@ import type { DecisionContext } from '../context.ts'
 import { scoreBuild, startBuild } from './build.ts'
 import { scoreDeliver, startDeliver } from './deliver.ts'
 import { scoreEat, startEat } from './eat.ts'
+import { scoreExplore, startExplore } from './explore.ts'
+import { scoreShare, startShare } from './share.ts'
+import { scoreSocialize, startSocialize } from './socialize.ts'
 import { scoreChop, scoreForage, startChop, startForage } from './gather.ts'
 import { scoreRest, startRest } from './rest.ts'
 import { scoreWander, startWander } from './wander.ts'
@@ -22,5 +25,8 @@ export const ACTIONS: readonly ActionDef[] = [
   { kind: 'forage', score: scoreForage, start: startForage },
   { kind: 'chop', score: scoreChop, start: startChop },
   { kind: 'build', score: scoreBuild, start: startBuild },
+  { kind: 'share', score: scoreShare, start: startShare },
+  { kind: 'socialize', score: scoreSocialize, start: startSocialize },
+  { kind: 'explore', score: scoreExplore, start: startExplore },
   { kind: 'wander', score: scoreWander, start: startWander },
 ]

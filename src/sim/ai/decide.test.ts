@@ -73,7 +73,7 @@ describe('utility decisions', () => {
     const { state, citizens: [c] } = sandbox(ROWS, { camp: [1, 1], citizens: [{ x: 3, y: 3 }], food: 5 })
     decide(state)
     const kinds = c!.lastScores.map((s) => s.kind).sort()
-    expect(kinds).toEqual(['build', 'chop', 'deliver', 'eat', 'forage', 'rest', 'wander'])
+    expect(kinds).toEqual(['build', 'chop', 'deliver', 'eat', 'explore', 'forage', 'rest', 'share', 'socialize', 'wander'])
     for (let i = 1; i < c!.lastScores.length; i++) {
       expect(c!.lastScores[i - 1]!.score).toBeGreaterThanOrEqual(c!.lastScores[i]!.score)
     }

@@ -12,6 +12,7 @@
 
 import {
   BASE_TICKS_PER_SECOND,
+  FRIENDSHIP_AFFINITY,
   createWorld,
   getClockTime,
   getDayNumber,
@@ -58,6 +59,29 @@ export interface SimulationSnapshot {
   population: number
   housed: number
   shelters: number
+  /** Percentage of map tiles discovered. */
+  explored: number
+  /** Mean social need of the living, 0..100. */
+  social: number
+  friendships: number
+}
+
+function socialSummary(w: WorldState): { explored: number; social: number; friendships: number } {
+  const living = w.citizens.filter((c) => c.alive)
+  const discovered = w.map.discovered.reduce<number>((n, d) => n + d, 0)
+  let friendships = 0
+  for (const c of living) {
+    for (const [id, r] of Object.entries(c.relationships)) {
+      // Count each mutual friendship once (from the lower id's side).
+      const other = living.find((o) => o.id === Number(id))
+      if (other && c.id < other.id && r.affinity >= FRIENDSHIP_AFFINITY && (other.relationships[c.id]?.affinity ?? 0) >= FRIENDSHIP_AFFINITY) friendships++
+    }
+  }
+  return {
+    explored: Math.round((discovered / w.map.discovered.length) * 100),
+    social: living.length ? Math.round(living.reduce((n, c) => n + c.needs.social, 0) / living.length) : 0,
+    friendships,
+  }
 }
 
 export class SimulationController {
@@ -197,6 +221,7 @@ export class SimulationController {
       population: this.world.citizens.filter((c) => c.alive).length,
       housed: this.world.citizens.filter((c) => c.alive && c.homeId !== null).length,
       shelters: this.world.structures.filter((s) => s.kind === 'shelter' && s.stage === 'complete').length,
+      ...socialSummary(this.world),
     }
   }
 

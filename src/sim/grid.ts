@@ -15,22 +15,22 @@ export function inBounds(map: Pick<TileMap, 'width' | 'height'>, x: number, y: n
 }
 
 /** Fixed neighbour order (N, E, S, W) keeps pathfinding deterministic. */
-const DIRECTIONS: readonly Point[] = [
+export const DIRECTIONS: readonly Point[] = [
   { x: 0, y: -1 },
   { x: 1, y: 0 },
   { x: 0, y: 1 },
   { x: -1, y: 0 },
 ]
 
-/** In-bounds 4-neighbours of a tile, in N, E, S, W order. */
+/** In-bounds 4-neighbours of a tile, in N, E, S, W order (DIRECTIONS). */
 export function neighbors4(map: Pick<TileMap, 'width' | 'height'>, index: TileIndex): TileIndex[] {
-  const { x, y } = toPoint(index, map.width)
+  const { width, height } = map
+  const x = index % width
   const result: TileIndex[] = []
-  for (const d of DIRECTIONS) {
-    const nx = x + d.x
-    const ny = y + d.y
-    if (inBounds(map, nx, ny)) result.push(toIndex(nx, ny, map.width))
-  }
+  if (index >= width) result.push(index - width)
+  if (x < width - 1) result.push(index + 1)
+  if (index + width < width * height) result.push(index + width)
+  if (x > 0) result.push(index - 1)
   return result
 }
 

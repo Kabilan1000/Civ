@@ -58,6 +58,7 @@ export function createCitizen(
     relationships: {},
     memories: [],
     lastScores: [],
+    lastSocialTick: null,
     alive: true,
     diedTick: null,
     deathCause: null,

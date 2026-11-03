@@ -56,23 +56,65 @@ export function labelRegions(map: TileMap): { labels: Int32Array; sizes: number[
 }
 
 /**
+ * Same as distanceField but over a precomputed walk mask (1 = may enter),
+ * plus one extra enterable tile (e.g. the citizen's home). Identical
+ * results to distanceField with the equivalent predicate.
+ */
+export function distanceFieldMask(map: TileMap, start: TileIndex, mask: Uint8Array, extra = -1): Int32Array {
+  const { width, height } = map
+  const size = width * height
+  const dist = new Int32Array(size).fill(-1)
+  if (!isPassable(map, start)) return dist
+  const queue = new Int32Array(size)
+  let tail = 0
+  dist[start] = 0
+  queue[tail++] = start
+  for (let head = 0; head < tail; head++) {
+    const tile = queue[head]!
+    const x = tile % width
+    const next = dist[tile]! + 1
+    let n = tile - width
+    if (tile >= width && dist[n] === -1 && (mask[n] === 1 || n === extra)) { dist[n] = next; queue[tail++] = n }
+    n = tile + 1
+    if (x < width - 1 && dist[n] === -1 && (mask[n] === 1 || n === extra)) { dist[n] = next; queue[tail++] = n }
+    n = tile + width
+    if (n < size && dist[n] === -1 && (mask[n] === 1 || n === extra)) { dist[n] = next; queue[tail++] = n }
+    n = tile - 1
+    if (x > 0 && dist[n] === -1 && (mask[n] === 1 || n === extra)) { dist[n] = next; queue[tail++] = n }
+  }
+  return dist
+}
+
+/**
  * Breadth-first step counts from `start` over passable tiles accepted by
  * `canEnter` (start always counts as 0). -1 = unreachable. Ignores terrain
  * cost; used for cheap "how far is it" scoring, while actual travel uses A*.
  */
 export function distanceField(map: TileMap, start: TileIndex, canEnter: (tile: TileIndex) => boolean): Int32Array {
-  const dist = new Int32Array(map.width * map.height).fill(-1)
+  const { width, height } = map
+  const size = width * height
+  const dist = new Int32Array(size).fill(-1)
   if (!isPassable(map, start)) return dist
+  // Hot path (one per AI decision, grows with explored territory): inline
+  // neighbours in the same N, E, S, W order as grid.neighbors4, typed queue.
+  const queue = new Int32Array(size)
+  let tail = 0
   dist[start] = 0
-  const queue: TileIndex[] = [start]
-  for (let head = 0; head < queue.length; head++) {
+  queue[tail++] = start
+  for (let head = 0; head < tail; head++) {
     const tile = queue[head]!
-    for (const n of neighbors4(map, tile)) {
+    const x = tile % width
+    const next = dist[tile]! + 1
+    const visit = (n: number) => {
       if (dist[n] === -1 && isPassable(map, n) && canEnter(n)) {
-        dist[n] = dist[tile]! + 1
-        queue.push(n)
+        dist[n] = next
+        queue[tail++] = n
       }
     }
+    if (tile >= width) visit(tile - width)
+    if (x < width - 1) visit(tile + 1)
+    if (tile + width < size) visit(tile + width)
+    if (x > 0) visit(tile - 1)
   }
   return dist
 }

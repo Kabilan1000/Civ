@@ -4,9 +4,12 @@
 //   eat           → 'eat'      one unit per EAT_TICKS
 //   rest          → 'sleep'    until REST_STOP_ENERGY
 //   build         → 'fetch' (at camp) | 'supply' (carrying wood) | 'construct'
+//   socialize     → 'talk'     recruit the partner, then CHAT_TICKS (systems/social.ts)
+//   share         → 'give'     SHARE_TICKS, then hand over food
+//   explore       → 'survey'   SURVEY_TICKS, then reveal EXPLORE_REVEAL_RADIUS
 //   wander        → 'linger'   WANDER_PAUSE_MIN..MAX ticks
 
-import { EAT_TICKS, GATHER_TICKS, WANDER_PAUSE_MAX, WANDER_PAUSE_MIN } from '../constants.ts'
+import { EAT_TICKS, GATHER_TICKS, SURVEY_TICKS, WANDER_PAUSE_MAX, WANDER_PAUSE_MIN } from '../constants.ts'
 import { nextInt } from '../rng.ts'
 import { getCampfire } from '../structures.ts'
 import type { Citizen, WorldState } from '../types.ts'
@@ -34,6 +37,18 @@ export function enterArrivalPhase(state: WorldState, c: Citizen): void {
     case 'rest':
       task.phase = 'sleep'
       task.ticksLeft = 0
+      break
+    case 'socialize':
+      task.phase = 'talk'
+      task.ticksLeft = 0
+      break
+    case 'share':
+      task.phase = 'give'
+      task.ticksLeft = 0
+      break
+    case 'explore':
+      task.phase = 'survey'
+      task.ticksLeft = SURVEY_TICKS
       break
     case 'build':
       task.ticksLeft = 0

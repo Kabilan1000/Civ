@@ -14,12 +14,28 @@
 //            than the site needs; extra stays carried); continue to
 //            construct once fully supplied
 //   construct (build) next to the site: +1 labour per tick until complete
+//   talk / listen / give   social interactions (systems/social.ts)
+//   survey   (explore) after SURVEY_TICKS reveal EXPLORE_REVEAL_RADIUS around
+//            the citizen; bumps map.version; 'discovered' memory and event
 //   linger   wait, then end
 // Transfers move whole units and are mirrored in state.ledger, so food and
 // wood are conserved. A finished or failed task makes the citizen decide
 // again next tick.
 
-import { CAMP_RADIUS, CARRY_CAPACITY, EAT_STOP_SATIETY, EAT_TICKS, FOOD_SATIETY, GATHER_TICKS, REST_STOP_ENERGY } from '../constants.ts'
+import {
+  CAMP_RADIUS,
+  CARRY_CAPACITY,
+  DISCOVERY_EVENT_MIN_TILES,
+  EAT_STOP_SATIETY,
+  EAT_TICKS,
+  EXPLORE_REVEAL_RADIUS,
+  FOOD_SATIETY,
+  GATHER_TICKS,
+  REST_STOP_ENERGY,
+} from '../constants.ts'
+import { remember } from '../citizens/memory.ts'
+import { pushEvent } from '../events.ts'
+import { revealAround } from '../map/discovery.ts'
 import { getCampTile } from '../ai/context.ts'
 import { enterArrivalPhase } from '../ai/phases.ts'
 import { manhattan, toPoint } from '../grid.ts'
@@ -27,6 +43,7 @@ import { findPath } from '../path/astar.ts'
 import { walkableFor, woodStillNeeded, workTiles } from '../structures.ts'
 import type { Citizen, Structure, WorldState } from '../types.ts'
 import { supplySite, workOnSite } from './construction.ts'
+import { give, listen, talk } from './social.ts'
 import { advanceMovement, clearPath, setPath } from './movement.ts'
 import { clampNeed } from './needs.ts'
 
@@ -57,6 +74,9 @@ function gather(state: WorldState, c: Citizen): void {
   else c.carrying = { kind: node.kind, amount: 1 }
   if (node.kind === 'berries') state.ledger.foodGathered++
   else state.ledger.woodGathered++
+  // Memories: a productive spot (refreshed, not duplicated, on every unit) / an emptied one.
+  remember(state, c, 'foundResource', 0.15, { tile: task.targetTile })
+  if (node.amount <= 0) remember(state, c, 'resourceDepleted', -0.1, { tile: task.targetTile })
 
   if (c.carrying.amount >= CARRY_CAPACITY[node.kind] || node.amount <= 0) endTask(state, c)
   else task.ticksLeft = GATHER_TICKS[node.kind]
@@ -156,7 +176,24 @@ function construct(state: WorldState, c: Citizen): void {
     endTask(state, c)
     return
   }
-  if (workOnSite(state, site)) endTask(state, c)
+  // Everyone building it right now (including c) remembers finishing it.
+  const crew = state.citizens.filter((o) => o.alive && o.task?.kind === 'build' && o.task.targetId === site.id)
+  if (workOnSite(state, site)) {
+    for (const o of crew) remember(state, o, 'builtShelter', 0.5, { tile: site.tile })
+    endTask(state, c)
+  }
+}
+
+function survey(state: WorldState, c: Citizen): void {
+  const task = c.task!
+  if (--task.ticksLeft > 0) return
+  const here = c.pos.y * state.map.width + c.pos.x
+  const revealed = revealAround(state.map, here, EXPLORE_REVEAL_RADIUS)
+  if (revealed > 0) {
+    remember(state, c, 'discovered', Math.min(0.7, 0.2 + revealed / 40), { tile: here })
+    if (revealed >= DISCOVERY_EVENT_MIN_TILES) pushEvent(state, 'discovered', [c.id], { tiles: revealed, tile: here })
+  }
+  endTask(state, c)
 }
 
 export function advanceTasks(state: WorldState): void {
@@ -191,6 +228,18 @@ export function advanceTasks(state: WorldState): void {
         break
       case 'construct':
         construct(state, c)
+        break
+      case 'talk':
+        talk(state, c, endTask)
+        break
+      case 'listen':
+        listen(state, c, endTask)
+        break
+      case 'give':
+        give(state, c, endTask)
+        break
+      case 'survey':
+        survey(state, c)
         break
       case 'linger':
         if (--task.ticksLeft <= 0) endTask(state, c)

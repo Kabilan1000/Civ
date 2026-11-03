@@ -117,7 +117,8 @@ Each tick runs systems in a fixed order:
 7. **social** — resolve conversations between adjacent citizens.
 8. **stats** — sample civilization metrics (every 24 ticks) for the dashboard.
 
-Implemented so far (M5): `time → needs (incl. health, death) → resources →
+Implemented so far (M6 — unchanged order; social and exploration run inside
+decide/act): `time → needs (incl. health, death) → resources →
 construction → decide → act` (`systems/time.ts`, `needs.ts`, `death.ts`,
 `resources.ts`, `construction.ts`, `decide.ts`, `tasks.ts`). The other systems slot into the
 positions above as their milestones land.
@@ -222,8 +223,11 @@ berry bush and tree *not targeted by another citizen*, nearest rest spot
 
 | Action  | Score |
 | ------- | ----- |
-| eat     | `rising(hunger, 0.25, 0.85)` × access (1 if carrying berries, else distance factor to camp if stockpile has food; 0 = no food reachable). Starving (< 15) ignores distance. |
-| rest    | 0 if energy ≥ 90; else `rising(tiredness, 0.1, 0.8)` + night bonus 0.35 |
+| eat     | `rising(hunger, 0.25, 0.85)` × access (1 if carrying berries, else distance factor to camp if stockpile has food; 0 = no food reachable). Hunger is judged at *arrival* (satiety minus the walk's expected decay, ≤ 10). Starving (< 15) ignores distance. Recent `sawDeath` memory: curve starts at 0.15. |
+| rest    | 0 if energy ≥ 90; else `rising(tiredness, 0.1, 0.7)` + night bonus 0.35, tiredness judged at arrival in bed (walk cost ≤ 15 energy). ×0.6 when satiety < 40 and food is reachable (eat before bed), unless energy is critical. |
+| share   | carrying berries, not hungry, a hungry (< 45) reachable neighbour: 0.9 × generosity × (0.4 + 0.6·their hunger) × distance (§3.10) |
+| socialize | 0 if satiety/energy < 35 or on cooldown; rising(loneliness, 0.15, 0.8) × (0.6 + 0.6·sociability) × best partner factor, ×0.4 at night (§3.10) |
+| explore | 0 unless satiety and energy ≥ 45; (0.25 + 0.3·curiosity) × role (explorer 1.6, others 0.3) × min(1, gain/20) × distance, ×1.15 after a recent discovery, ×0.3 at night (§3.12) |
 | deliver | 0 if carrying nothing; else 0.25 + 0.55 × fullness (+0.1 if the village has no food) |
 | forage / chop | 0.5 × role × (0.8 + 0.4·diligence) × demand × distance factor × (1 − ½ fullness) × (½ at night). Demand rises from 0.15 with stockpile shortage (food: below 6 per citizen, or personal hunger; wood: below 40). |
 | wander  | (0.1 + 0.08·curiosity) × role (explorer 1.5) — fallback |
@@ -234,8 +238,13 @@ possible action (drawn in fixed order). Ties keep action order
 `eat, rest, deliver, forage, chop, wander`.
 
 **Hysteresis / intention persistence:** a running task is kept unless the best
-alternative beats the task's own current score by `SWITCH_MARGIN` (0.2). The
-margin is waived for eat when satiety < 15 and for rest when energy < 10.
+alternative beats the task's own current score by `SWITCH_MARGIN` (0.2).
+The margin is waived for eat/rest when that need is critical (satiety < 15,
+energy < 25) or when its score is at maximum urgency (≥ 0.95 — scores are
+capped at 1, so a 0.84 job could otherwise never be interrupted). Between
+two survival tasks (eat ↔ rest) only a critical need the current task does
+not address may cut in, so they never thrash. Talking, listening and giving
+count as at least 0.6, so conversations finish unless something is urgent.
 Interrupted citizens keep what they carry.
 
 **Explainability:** every decision stores all six scores, best first, in
@@ -309,19 +318,74 @@ only, planned once) → arrival phase (`ai/phases.ts`): `gather`, `deposit`,
   wood held by structures + woodLost − regrown is constant (tested every
   tick); food additionally counts foodLost.
 
-### 3.10 Social: relationships & memory
+### 3.10 Social: relationships, interactions & memory (M6)
 
-- `relationships[otherId] = { affinity: -100..100, familiarity: 0..100,
-  lastInteractionTick }`.
-- Interactions between adjacent citizens: **chat** (+affinity, +social),
-  **share food** (hungry partner, giver has food), **argue** (more likely when
-  needs are low; −affinity). The outcome is a weighted, seeded roll influenced by
-  personality and current affinity.
-- `socialize` targets prefer high-affinity, nearby citizens.
-- **Memory**: a capped (20) list of `{ tick, kind, subjectId?, tile?, valence }`
-  entries — found food at X, argued with Y, built a shelter, saw Z die. Memory
-  biases decisions (remembered resource tiles; avoiding disliked citizens) and
-  is shown in the inspector. Oldest / least salient entries are evicted first.
+**Relationships** (`citizens/relationships.ts`): directional records —
+`citizen.relationships[otherId] = { affinity −100..100, familiarity 0..100,
+lastTick }` is how *this* citizen sees the other. Familiarity is always
+changed equally on both sides (so it stays symmetric); affinity may differ
+(the receiver of food likes the giver more than vice versa). Records are
+created lazily on the first completed interaction (no record = strangers,
+0/0), keyed by id so duplicates are impossible; the validator rejects
+self-references and unknown ids. Crossing affinity 50 / −40 emits a
+`friendship` / `rivalry` event once per crossing.
+
+**Interactions** (`systems/social.ts`, actions `socialize` and `share`):
+
+| | Who | Time | Effects |
+| --- | --- | --- | --- |
+| chat | initiator + recruited listener, both alive and within 2 tiles | 8 ticks after the partner joins | social +30 each, familiarity +6, affinity +(5 + 6 × the *other's* sociability), `chat` memory each |
+| argue | same conversation, seeded roll: P = 0.05 + 0.2·(1 − mean sociability) + 0.3·stress + 0.25·bad blood, ≤ 0.6 | same | social +8, familiarity +3, affinity −(8 + 6·(1 − own resilience)), `argument` memory, event |
+| share | giver carrying berries → hungry neighbour (< 45 satiety) within 2 tiles | 3 ticks | ≤ 2 berries move from the giver's load into the receiver's stomach (+25 satiety each, `ledger.foodEaten`), affinity +5 giver / +15 receiver, social +15 each, `gaveFood` / `receivedFood` memories, `sharedFood` event |
+
+- **Partner choice:** available partners only — alive, not asleep, not in
+  critical need, and idle, wandering or merely walking to a job; within 10
+  BFS steps. Partner factor = (0.5 + 0.5·(affinity+100)/200) ×
+  (1 + 0.3·familiarity/50) × distance, ×0.3 after a recent argument with
+  them, ×1.3 if they recently fed us. Affinity < −50 → avoided.
+- **No deadlocks:** the initiator walks to the partner; on arrival the
+  partner is recruited into `listen` *only if still available and in reach*,
+  otherwise the initiator gives up at once. Either side leaving, dying or
+  drifting away ends the conversation with no effects.
+- **Anti-spam:** personal cooldown 40 ticks, pair cooldown 120 ticks; plain
+  chats create memories, not events (arguments, shares and milestones do).
+- **Survival first:** social actions score 0 below 35 satiety/energy, and
+  urgent eat/rest break conversations (hysteresis rules above).
+- Social need now recovers **only** through these interactions (M4's
+  proximity recovery is gone). 30-seed sweep: mean social ≈ 70, < 20 in
+  0.3% of samples (mostly very unsociable citizens).
+
+**Memory** (`citizens/memory.ts`): `{ id, tick, kind, subjectId?, tile?,
+valence }`, recorded only where the event happens:
+
+| Kind | Recorded when | Influences |
+| --- | --- | --- |
+| chat / argument | a conversation completes (both sides) | partner choice (argument ×0.3) |
+| receivedFood / gaveFood | a share completes | reciprocity: share score +0.3 towards the giver; partner ×1.3 |
+| foundResource / resourceDepleted | a unit is gathered / a node emptied | remembered productive nodes count as 3 steps closer |
+| discovered | a survey reveals tiles | explore momentum ×1.15 |
+| builtShelter | the crew finishing a shelter | — (history) |
+| sawDeath | a death within 6 tiles | eat earlier (caution) |
+
+Bounded at 24 per citizen. A repeat (same kind/subject/tile within 240
+ticks) refreshes the old memory instead of adding one; when full, the least
+salient (smallest |valence|, then oldest, then lowest id) is forgotten.
+Memories influence decisions for 480 ticks.
+
+### 3.12 Exploration (M6, `ai/actions/explore.ts`)
+
+- **Frontier:** a walkable (discovered, passable, not solid) tile with an
+  undiscovered 4-neighbour; **gain** = undiscovered tiles within 4. The
+  explorer picks the best gain / (BFS steps + 5), ties by index, skipping
+  frontiers within 4 of another explorer's target. Unreachable frontiers
+  never appear in the BFS; surveyed ones lose their gain, so nothing is
+  reselected in vain. Interrupted exploration simply re-plans later.
+- **Survey:** after arriving, 4 ticks, then every tile within radius 4 is
+  discovered (`revealAround` bumps `map.version`), a `discovered` memory is
+  stored and, for ≥ 10 new tiles, a `discovered` event.
+- Paths still cross discovered tiles only; new resources become gathering
+  targets as soon as they are discovered and reachable.
+- 30-seed sweep: discovered tiles grow from ≈113 to ≈767 of 864 in 10 days.
 
 ### 3.11 Events
 
@@ -522,6 +586,11 @@ UI-only state (selected citizen, open panels) lives in React, not in the sim.
   opacity rises at night. No full-screen overlay. Measured frame time is
   unchanged from M4.
 - PixiJS is code-split: `MapView` dynamic-imports the renderer.
+- **Social badges** (M6): a tiny speech bubble while talking/listening/giving,
+  then for 12 ticks tinted by the latest memory (white chat, red argument,
+  pink shared food). Exploration's fog reveals re-bake the map layer through
+  the existing `discovered` diff. Frame time measured identical to M5
+  (interleaved runs).
 - Click → tile → topmost citizen → `onSelectCitizen(id)` callback to React.
 - Renderer owns Pixi objects keyed by entity id and reconciles each frame
   (create/update/destroy), never stores sim data of its own.
@@ -577,6 +646,13 @@ Engine tests live next to the code (`src/sim/**/*.test.ts`).
 
 - `step()` ≤ 1 ms average for 12 citizens (10x speed = 50 ticks/s ⇒ ≤ 5% of a frame budget per second).
 - No whole-state cloning per tick; A* only on decision/repath, not every tick.
+- Hot paths grow with explored territory, so: one BFS per decision over a
+  per-tick shared walk mask (`structures.baseWalkMask`), inline-neighbour
+  BFS (`path/flood.distanceFieldMask`), and frontiers cached by discovered-
+  tile count. These are derived caches keyed on every input they depend on,
+  never serialized; results are identical without them.
+- Measured (Node): ≈0.11 ms/tick with the island fully explored; 10 000
+  ticks ≈ 1.1 s.
 - React re-renders ≤ 5 Hz; Pixi updates only dynamic layers each frame.
 - If needed later, the sim can move to a Web Worker unchanged (it's pure).
 

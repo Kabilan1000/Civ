@@ -56,6 +56,7 @@ export type ActionKind =
   | 'forage'
   | 'chop'
   | 'deliver'
+  | 'share'
   | 'build'
   | 'rest'
   | 'socialize'
@@ -74,11 +75,18 @@ export interface Task {
   startedTick: number
 }
 
+/**
+ * How one citizen sees another (directional: A's record of B lives on A).
+ * Familiarity is always changed equally on both sides, so it stays symmetric;
+ * affinity can differ (a giver and a receiver feel differently).
+ * No record = strangers (familiarity 0, affinity 0).
+ */
 export interface Relationship {
   /** -100..100 */
   affinity: number
   /** 0..100 */
   familiarity: number
+  /** Tick of the last completed interaction (pair cooldown). */
   lastTick: number
 }
 
@@ -88,16 +96,22 @@ export type MemoryKind =
   | 'chat'
   | 'argument'
   | 'receivedFood'
+  | 'gaveFood'
   | 'builtShelter'
   | 'sawDeath'
   | 'discovered'
 
+/** Something that really happened to this citizen. See citizens/memory.ts. */
 export interface Memory {
+  /** Unique across the world (shared id counter). */
+  id: number
   tick: number
   kind: MemoryKind
+  /** The other citizen involved, if any. */
   subjectId?: number
+  /** Where it happened / what tile it concerns, if any. */
   tile?: TileIndex
-  /** -1..1 */
+  /** -1..1: how good or bad it felt. Also its salience for eviction. */
   valence: number
 }
 
@@ -131,6 +145,8 @@ export interface Citizen {
   memories: Memory[]
   /** Top scores from the last decision, for the inspector. */
   lastScores: ActionScore[]
+  /** Tick of the last completed social interaction, or null (never). */
+  lastSocialTick: number | null
   alive: boolean
   diedTick: number | null
   deathCause: DeathCause | null

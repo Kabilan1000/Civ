@@ -41,6 +41,26 @@ export function getHome(state: WorldState, c: Citizen): Structure | undefined {
 }
 
 /**
+ * Tiles anyone may walk on this tick: passable, discovered and not solid.
+ * Derived data, cached per (state, tick, map.version, structure count) — the
+ * inputs that can change it — so all decisions in a tick share one mask.
+ * Never serialized; results are identical without the cache.
+ */
+const maskCache = new WeakMap<WorldState, { key: string; mask: Uint8Array }>()
+
+export function baseWalkMask(state: WorldState): Uint8Array {
+  const { map } = state
+  const key = `${state.tick}:${map.version}:${state.structures.length}:${map.terrain.length}`
+  const cached = maskCache.get(state)
+  if (cached && cached.key === key) return cached.mask
+  const mask = new Uint8Array(map.terrain.length)
+  for (let i = 0; i < mask.length; i++) mask[i] = map.discovered[i] === 1 && isPassable(map, i) ? 1 : 0
+  for (const s of state.structures) if (s.kind === 'shelter') mask[s.tile] = 0
+  maskCache.set(state, { key, mask })
+  return mask
+}
+
+/**
  * Walkability for a citizen: discovered, not solid — except the citizen's own
  * completed home, which they may enter (to sleep).
  */

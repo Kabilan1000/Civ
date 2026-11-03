@@ -23,6 +23,8 @@ export default function App() {
               Population {snapshot.population} · Housed {snapshot.housed} · Shelters {snapshot.shelters}
               <br />
               Food {snapshot.food} · Wood {snapshot.wood}
+              <br />
+              Explored {snapshot.explored}% · Social {snapshot.social} · Friendships {snapshot.friendships}
             </span>
             <br />
             Full dashboard arrives in M7.

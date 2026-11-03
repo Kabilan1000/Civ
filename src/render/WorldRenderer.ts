@@ -10,6 +10,10 @@
 //   structures  rebuilt when their summary changes (stage, wood, progress)
 //   citizens    one small Container each, repositioned every frame
 //   lights      campfire glow and lit shelter windows, additive blend
+// Citizens carry a tiny speech-bubble badge while talking/listening/giving,
+// and briefly afterwards tinted by what happened (from their latest memory):
+// white chat, red argument, pink food shared. Fog reveals from exploration
+// re-bake the map layer via the discovered-array diff below.
 // Day/night: the map, resource and structure layers are TINTED by the
 // clock (render/daylight.ts) and citizens get a lighter tint — a colour
 // multiply with no extra fill — while light sources grow brighter at night.
@@ -43,8 +47,25 @@ interface CitizenView {
   root: Container
   body: Graphics
   cargo: Graphics
+  bubble: Graphics
   cargoKind: 'berries' | 'wood' | null
   asleep: boolean
+  bubbleTint: number | null
+}
+
+/** Ticks a post-interaction bubble lingers. */
+const BUBBLE_AFTERGLOW_TICKS = 12
+const SOCIAL_PHASES = new Set(['talk', 'listen', 'give'])
+
+/** Bubble colour for a citizen right now, or null for none. */
+function bubbleTint(state: WorldState, c: Citizen): number | null {
+  if (c.task && SOCIAL_PHASES.has(c.task.phase)) return COLORS.bubble
+  const last = c.memories.at(-1)
+  if (!last || state.tick - last.tick > BUBBLE_AFTERGLOW_TICKS) return null
+  if (last.kind === 'argument') return COLORS.bubbleArgue
+  if (last.kind === 'receivedFood' || last.kind === 'gaveFood') return COLORS.bubbleShare
+  if (last.kind === 'chat') return COLORS.bubble
+  return null
 }
 
 function sameArray<T>(a: readonly T[], b: readonly T[]): boolean {
@@ -308,9 +329,16 @@ export class WorldRenderer implements FrameRenderer {
     // Cargo badge: white shape tinted per load (berries red, wood brown).
     const cargo = new Graphics().circle(5, -5, 3).fill(0xffffff).stroke({ width: 1, color: COLORS.shadow, alpha: 0.6 })
     cargo.visible = false
-    root.addChild(shadow, body, cargo)
+    // Speech bubble: white shape tinted per interaction.
+    const bubble = new Graphics()
+      .roundRect(-9, -17, 9, 6, 2)
+      .fill(0xffffff)
+      .poly([-6, -11, -4, -11, -6, -9])
+      .fill(0xffffff)
+    bubble.visible = false
+    root.addChild(shadow, body, cargo, bubble)
     root.label = `citizen-${c.id}`
-    return { root, body, cargo, cargoKind: null, asleep: false }
+    return { root, body, cargo, bubble, cargoKind: null, asleep: false, bubbleTint: null }
   }
 
   private updateCitizens(state: WorldState, alpha: number): void {
@@ -337,6 +365,12 @@ export class WorldRenderer implements FrameRenderer {
       if (asleep !== view.asleep) {
         view.asleep = asleep
         view.body.alpha = asleep ? 0.5 : 1
+      }
+      const tint = bubbleTint(state, c)
+      if (tint !== view.bubbleTint) {
+        view.bubbleTint = tint
+        view.bubble.visible = tint !== null
+        if (tint !== null) view.bubble.tint = tint
       }
       // Asleep inside their own shelter: drawn as the lit house, not a dot on the roof.
       view.root.visible = !(asleep && c.homeId !== null && c.task?.targetTile === c.pos.y * state.map.width + c.pos.x)

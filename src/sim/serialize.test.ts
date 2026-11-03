@@ -69,6 +69,24 @@ describe('serialize / deserialize', () => {
     expect(a.structures.some((s) => s.kind === 'shelter')).toBe(true) // the old village starts building
   })
 
+  it('migrates a real v3 save written by the M5 code and keeps running deterministically', () => {
+    const raw = readFileSync(join(import.meta.dirname, '__tests__/fixtures/m5-save-v3.json'), 'utf8')
+    const v3 = JSON.parse(raw)
+    expect(v3.schemaVersion).toBe(3)
+    const a = deserialize(raw)
+    expect(a.schemaVersion).toBe(SCHEMA_VERSION)
+    expect(a.citizens.every((c) => c.lastSocialTick === null)).toBe(true)
+    expect(a.structures.filter((s) => s.kind === 'shelter' && s.stage === 'complete')).toHaveLength(4)
+    expect(a.citizens.filter((c) => c.homeId !== null)).toHaveLength(12)
+    const b = deserialize(raw)
+    stepN(a, 1500)
+    stepN(b, 1500)
+    expect(serialize(a)).toBe(serialize(b))
+    // The migrated village takes up the new behaviours.
+    expect(a.citizens.some((c) => Object.keys(c.relationships).length > 0)).toBe(true)
+    expect(a.map.discovered.filter((d) => d === 1).length).toBeGreaterThan(v3.map.discovered.filter((d: number) => d === 1).length)
+  })
+
   it('rejects a current-version save that is missing the ledger', () => {
     expectSaveError(() => deserialize(corrupt((r) => delete r.ledger)), 'invalid-data', /ledger/)
   })
@@ -105,6 +123,13 @@ describe('serialize / deserialize', () => {
     ['structure', (r: any) => delete r.structures[0].kind, /structures\[0\]\.kind/],
     ['structure stage', (r: any) => (r.structures[0].stage = 'ruined'), /structures\[0\]\.stage/],
     ['over-capacity shelter', (r: any) => (r.structures[0].residentIds = r.citizens.slice(0, 4).map((c: any) => c.id)), /residentIds/],
+    ['self relationship', (r: any) => (r.citizens[0].relationships[r.citizens[0].id] = { affinity: 0, familiarity: 0, lastTick: 0 }), /relationships/],
+    ['relationship to nobody', (r: any) => (r.citizens[0].relationships['9999'] = { affinity: 0, familiarity: 0, lastTick: 0 }), /relationships/],
+    ['affinity out of range', (r: any) => (r.citizens[0].relationships[r.citizens[1].id] = { affinity: 101, familiarity: 0, lastTick: 0 }), /affinity/],
+    ['duplicate memory id', (r: any) => (r.citizens[0].memories = [
+      { id: r.citizens[1].id, tick: 0, kind: 'chat', subjectId: r.citizens[1].id, valence: 0.3 },
+    ]), /unique id/], // reported where the clash is detected
+    ['too many memories', (r: any) => (r.citizens[0].memories = Array.from({ length: 25 }, (_, k) => ({ id: 1000 + k, tick: 0, kind: 'chat', valence: 0 }))), /memories/],
     ['dead citizen with a task', (r: any) => Object.assign(r.citizens[0], {
       alive: false, diedTick: 0, deathCause: 'starvation',
       task: { kind: 'wander', phase: 'linger', targetTile: 0, targetId: null, ticksLeft: 1, startedTick: 0 },

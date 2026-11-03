@@ -55,7 +55,8 @@ describe('time conventions', () => {
     step(s)
     expect(s.tick).toBe(240)
     expect(getTickOfDay(s)).toBe(0)
-    expect(s.events.at(-1)).toMatchObject({ kind: 'dayStarted', tick: 240, data: { day: 2 } })
+    // Other events (e.g. a discovery) may follow in the same tick.
+    expect(s.events.find((e) => e.kind === 'dayStarted')).toMatchObject({ tick: 240, data: { day: 2 } })
 
     stepN(s, TICKS_PER_DAY * 3)
     const days = s.events.filter((e) => e.kind === 'dayStarted')

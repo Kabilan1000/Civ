@@ -29,6 +29,8 @@ Full design: `docs/ARCHITECTURE.md` — read it before structural changes and ke
 13. **Resources are conserved.** Move whole units only and record gathering, regrowth, eating and losses in `state.ledger`; wood held by structures counts too. The conservation test checks every tick. Citizens act only on discovered, reachable tiles.
 14. **Shelters are solid.** Path and step checks use `structures.walkableFor`; site selection must never cut off tiles reachable from the campfire.
 15. **Rendering: no full-screen overlays.** Use container tints, baked layers and small sprites; measure frame time in the browser after visual changes.
+16. **Derived caches** (walk mask, frontiers) are allowed in `sim/` only if keyed on every input they depend on and never stored in `WorldState`; results must be identical without them.
+17. **Memories record only real events**, written where the event happens. Social interactions require both participants alive and within `INTERACT_RADIUS`; nobody waits for an absent partner.
 
 ## Working style
 

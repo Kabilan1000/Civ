@@ -19,6 +19,16 @@ describe('performance', () => {
     expect(ms / 10_000).toBeLessThan(1)
   })
 
+  it('stays well under 1 ms per tick once most of the island is explored', () => {
+    const s = createWorld({ seed: 'perf-explored' })
+    stepN(s, 240 * 15)
+    const explored = s.map.discovered.filter((d) => d === 1).length
+    expect(explored).toBeGreaterThan(600) // most of the 864-tile map
+    const t0 = performance.now()
+    stepN(s, 2000)
+    expect((performance.now() - t0) / 2000).toBeLessThan(0.5)
+  })
+
   it('generates a 36x24 map in well under 20 ms on average', () => {
     const t0 = performance.now()
     for (let i = 0; i < 50; i++) generateMap(`perf-${i}`, 36, 24, { spawnTiles: 12 })

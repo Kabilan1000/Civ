@@ -4,7 +4,8 @@
 //   satiety  −SATIETY_DECAY every tick; restored only by eating
 //   energy   ENERGY_RATES[activity]: idle/walking/working drain, sleeping refills
 //            (faster when sleeping inside one's own completed shelter)
-//   social   −SOCIAL_DECAY, or +SOCIAL_RECOVERY while someone is within SOCIAL_RADIUS
+//   social   −SOCIAL_DECAY every tick; restored only by real interactions
+//            (chat, argument, sharing food — systems/social.ts)
 //   health   falls while starving (satiety 0) or exhausted (energy 0), scaled
 //            down by resilience; recovers slowly while fed and rested.
 //            At health 0 the citizen dies (systems/death.ts).
@@ -18,12 +19,9 @@ import {
   HEALTH_RESILIENCE_FACTOR,
   SATIETY_DECAY,
   SOCIAL_DECAY,
-  SOCIAL_RADIUS,
-  SOCIAL_RECOVERY,
   STARVING_HEALTH_LOSS,
   type Activity,
 } from '../constants.ts'
-import { manhattan } from '../grid.ts'
 import { getHome } from '../structures.ts'
 import type { Citizen, WorldState } from '../types.ts'
 import { killCitizen } from './death.ts'
@@ -50,8 +48,7 @@ export function updateNeeds(state: WorldState): void {
     n.satiety = clampNeed(n.satiety - SATIETY_DECAY)
     n.energy = clampNeed(n.energy + ENERGY_RATES[activityOf(c, state)])
 
-    const company = living.some((o) => o !== c && manhattan(o.pos, c.pos) <= SOCIAL_RADIUS)
-    n.social = clampNeed(n.social + (company ? SOCIAL_RECOVERY : -SOCIAL_DECAY))
+    n.social = clampNeed(n.social - SOCIAL_DECAY)
 
     const toughness = 1 - HEALTH_RESILIENCE_FACTOR * c.personality.resilience
     let dh = 0

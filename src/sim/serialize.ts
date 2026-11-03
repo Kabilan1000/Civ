@@ -2,7 +2,7 @@
 // parses, migrates older schema versions step by step, then validates the
 // full shape before handing back a WorldState.
 
-import { MAX_EVENTS, ROLES, SCHEMA_VERSION, SHELTER_CAPACITY, TERRAINS } from './constants.ts'
+import { MAX_EVENTS, MAX_MEMORIES, ROLES, SCHEMA_VERSION, SHELTER_CAPACITY, TERRAINS } from './constants.ts'
 import type { WorldState } from './types.ts'
 
 export type SaveErrorCode = 'invalid-json' | 'unsupported-version' | 'invalid-data'
@@ -44,6 +44,18 @@ const migrations: Record<number, Migration> = {
     }))
     const ledger = { ...(data.ledger as Record<string, unknown>), foodLost: 0, woodLost: 0 }
     return { ...data, structures, citizens, ledger }
+  },
+  // v3 → v4 (M6): memories get unique ids (allocated from nextId in citizen
+  // order — v3 never recorded any, but older hand-made data is handled);
+  // citizens get lastSocialTick (null = never socialised).
+  3: (data) => {
+    let nextId = data.nextId as number
+    const citizens = (data.citizens as Record<string, unknown>[]).map((c) => ({
+      ...c,
+      memories: ((c.memories as Record<string, unknown>[]) ?? []).map((m) => ({ id: nextId++, ...m })),
+      lastSocialTick: null,
+    }))
+    return { ...data, citizens, nextId }
   },
 }
 
@@ -129,13 +141,13 @@ function nullable<T>(v: unknown, path: string, check: (v: unknown, path: string)
 }
 
 const RESOURCE_KINDS = ['berries', 'wood'] as const
-const ACTION_KINDS = ['eat', 'forage', 'chop', 'deliver', 'build', 'rest', 'socialize', 'explore', 'wander', 'idle'] as const
+const ACTION_KINDS = ['eat', 'forage', 'chop', 'deliver', 'share', 'build', 'rest', 'socialize', 'explore', 'wander', 'idle'] as const
 const STRUCTURE_KINDS = ['campfire', 'shelter'] as const
 const STRUCTURE_STAGES = ['planned', 'underConstruction', 'complete'] as const
 const DEATH_CAUSES = ['starvation', 'exhaustion'] as const
 const MEMORY_KINDS = [
   'foundResource', 'resourceDepleted', 'chat', 'argument',
-  'receivedFood', 'builtShelter', 'sawDeath', 'discovered',
+  'receivedFood', 'gaveFood', 'builtShelter', 'sawDeath', 'discovered',
 ] as const
 const EVENT_KINDS = [
   'worldCreated', 'dayStarted', 'shelterStarted', 'shelterCompleted', 'shelterAbandoned', 'movedIn', 'chat', 'argument',
@@ -189,6 +201,14 @@ function validateWorld(d: Record<string, unknown>): asserts d is Record<string, 
 
   // Citizens
   let lastCitizenId = 0
+  const citizenIds = new Set(
+    arr(d.citizens, 'citizens').map((c) => (isRecord(c) ? c.id : undefined)).filter((x): x is number => Number.isInteger(x)),
+  )
+  const citizenRef = (v: unknown, p: string) => {
+    const value = id(v, p)
+    if (!citizenIds.has(value)) fail(p, 'an existing citizen id')
+    return value
+  }
   arr(d.citizens, 'citizens').forEach((raw, i) => {
     const p = `citizens[${i}]`
     const c = obj(raw, p)
@@ -228,18 +248,23 @@ function validateWorld(d: Record<string, unknown>): asserts d is Record<string, 
     nullable(c.homeId, `${p}.homeId`, id)
     for (const [key, rel] of Object.entries(obj(c.relationships, `${p}.relationships`))) {
       const rp = `${p}.relationships.${key}`
-      id(Number(key), `${rp} (key)`)
+      if (String(citizenRef(Number(key), `${rp} (key)`)) !== key || Number(key) === cid) {
+        fail(`${rp} (key)`, 'another citizen\'s id')
+      }
       const r = obj(rel, rp)
       num(r.affinity, `${rp}.affinity`, -100, 100)
       num(r.familiarity, `${rp}.familiarity`, 0, 100)
       int(r.lastTick, `${rp}.lastTick`, 0)
     }
-    arr(c.memories, `${p}.memories`).forEach((m, j) => {
+    const memories = arr(c.memories, `${p}.memories`)
+    if (memories.length > MAX_MEMORIES) fail(`${p}.memories`, `at most ${MAX_MEMORIES} entries`)
+    memories.forEach((m, j) => {
       const mp = `${p}.memories[${j}]`
       const mem = obj(m, mp)
-      int(mem.tick, `${mp}.tick`, 0)
+      uniqueId(mem.id, `${mp}.id`)
+      int(mem.tick, `${mp}.tick`, 0, d.tick as number)
       oneOf(mem.kind, MEMORY_KINDS, `${mp}.kind`)
-      if (mem.subjectId !== undefined) id(mem.subjectId, `${mp}.subjectId`)
+      if (mem.subjectId !== undefined) citizenRef(mem.subjectId, `${mp}.subjectId`)
       if (mem.tile !== undefined) tile(mem.tile, `${mp}.tile`)
       num(mem.valence, `${mp}.valence`, -1, 1)
     })
@@ -248,6 +273,7 @@ function validateWorld(d: Record<string, unknown>): asserts d is Record<string, 
       oneOf(score.kind, ACTION_KINDS, `${p}.lastScores[${j}].kind`)
       num(score.score, `${p}.lastScores[${j}].score`)
     })
+    nullable(c.lastSocialTick, `${p}.lastSocialTick`, (v, lp) => int(v, lp, 0, d.tick as number))
     const alive = bool(c.alive, `${p}.alive`)
     const diedTick = nullable(c.diedTick, `${p}.diedTick`, (v, dp) => int(v, dp, 0))
     const cause = nullable(c.deathCause, `${p}.deathCause`, (v, cp) => oneOf(v, DEATH_CAUSES, cp))

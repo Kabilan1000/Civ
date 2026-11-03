@@ -1,10 +1,14 @@
 // Everything an action needs to score itself for one citizen at one tick.
 // Built once per decision; cheap (one BFS over the 36x24 map).
 
+import { recentMemories } from '../citizens/memory.ts'
 import { REST_RADIUS } from '../constants.ts'
+
+/** A remembered productive node is treated as this many steps closer. */
+export const REMEMBERED_DISCOUNT = 3
 import { isPassable, manhattan, toIndex, toPoint } from '../grid.ts'
-import { distanceField } from '../path/flood.ts'
-import { getHome, getOpenSite, solidTiles, walkableFor, workTiles } from '../structures.ts'
+import { distanceFieldMask } from '../path/flood.ts'
+import { baseWalkMask, getHome, getOpenSite, solidTiles, workTiles } from '../structures.ts'
 import { dayPhaseAt } from '../systems/time.ts'
 import type { Citizen, ResourceKind, Structure, TileIndex, WorldState } from '../types.ts'
 
@@ -34,6 +38,8 @@ export interface DecisionContext {
   /** The open construction site and the nearest reachable tile to work it from. */
   site: Structure | null
   siteWorkTile: Target | null
+  /** Lazily computed by ai/actions/explore.ts (undefined = not yet computed). */
+  frontierMemo?: { tile: TileIndex; steps: number; gain: number } | null
 }
 
 export function getCampTile(state: WorldState): TileIndex | null {
@@ -64,19 +70,27 @@ function nearest(steps: Int32Array, accept: (tile: TileIndex) => boolean): Targe
 export function buildContext(state: WorldState, c: Citizen): DecisionContext {
   const { map } = state
   const here = toIndex(c.pos.x, c.pos.y, map.width)
-  const steps = distanceField(map, here, walkableFor(state, c))
+  const home = getHome(state, c)
+  const steps = distanceFieldMask(map, here, baseWalkMask(state), home?.tile ?? -1)
   const campTile = getCampTile(state)
   const campSteps = campTile === null ? -1 : steps[campTile]!
   const reserved = reservedTiles(state, c)
 
-  const resource = (kind: ResourceKind) =>
-    nearest(steps, (t) => {
+  // Remembered good spots (recent 'foundResource' memories) feel REMEMBERED_DISCOUNT steps closer.
+  const remembered = new Set(recentMemories(state, c, 'foundResource').map((m) => m.tile))
+  const resource = (kind: ResourceKind): Target | null => {
+    let best: (Target & { cost: number }) | null = null
+    for (let t = 0; t < steps.length; t++) {
+      const d = steps[t]!
       const node = map.resources[t]
-      return node !== null && node !== undefined && node.kind === kind && node.amount > 0 && !reserved.has(t)
-    })
+      if (d < 0 || !node || node.kind !== kind || node.amount <= 0 || reserved.has(t)) continue
+      const cost = remembered.has(t) ? Math.max(0, d - REMEMBERED_DISCOUNT) : d
+      if (!best || cost < best.cost) best = { tile: t, steps: d, cost }
+    }
+    return best && { tile: best.tile, steps: best.steps }
+  }
 
   const solid = solidTiles(state)
-  const home = getHome(state, c)
   let restSpot: Target | null = home && steps[home.tile]! >= 0 ? { tile: home.tile, steps: steps[home.tile]! } : null
   const restAtHome = restSpot !== null
   if (!restSpot && campTile !== null && campSteps >= 0) {

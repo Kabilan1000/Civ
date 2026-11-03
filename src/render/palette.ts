@@ -35,6 +35,9 @@ export const COLORS = {
   roof: 0x8e3b2c,
   stake: 0xe8d9b5,
   windowLight: 0xffd36b,
+  bubble: 0xf4f6fa,
+  bubbleArgue: 0xff5a4f,
+  bubbleShare: 0xff9ecb,
   shadow: 0x000000,
 } as const
 

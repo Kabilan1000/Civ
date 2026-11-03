@@ -6,7 +6,6 @@ import {
   HEALTH_RECOVERY,
   SATIETY_DECAY,
   SOCIAL_DECAY,
-  SOCIAL_RECOVERY,
   STARVING_HEALTH_LOSS,
   TICKS_PER_DAY,
 } from '../constants.ts'
@@ -45,14 +44,14 @@ describe('needs', () => {
     expect(ENERGY_RATES.walking).toBeLessThan(ENERGY_RATES.idle)
   })
 
-  it('social decays alone and recovers with company', () => {
+  it('social decays every tick, even with company (it only recovers through interactions)', () => {
     const alone = lone()
     updateNeeds(alone.state)
     close(alone.citizens[0]!.needs.social, 70 - SOCIAL_DECAY)
 
-    const pair = sandbox(['.....'], { camp: [0, 0], citizens: [{ x: 0, y: 0 }, { x: 2, y: 0 }] })
+    const pair = sandbox(['.....'], { camp: [0, 0], citizens: [{ x: 0, y: 0 }, { x: 1, y: 0 }] })
     updateNeeds(pair.state)
-    for (const c of pair.citizens) close(c.needs.social, 70 + SOCIAL_RECOVERY)
+    for (const c of pair.citizens) close(c.needs.social, 70 - SOCIAL_DECAY)
   })
 
   it('health falls when starving or exhausted (softened by resilience) and recovers when well', () => {
