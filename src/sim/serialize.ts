@@ -2,7 +2,7 @@
 // parses, migrates older schema versions step by step, then validates the
 // full shape before handing back a WorldState.
 
-import { MAX_EVENTS, ROLES, SCHEMA_VERSION, TERRAINS } from './constants.ts'
+import { MAX_EVENTS, ROLES, SCHEMA_VERSION, SHELTER_CAPACITY, TERRAINS } from './constants.ts'
 import type { WorldState } from './types.ts'
 
 export type SaveErrorCode = 'invalid-json' | 'unsupported-version' | 'invalid-data'
@@ -28,6 +28,23 @@ const migrations: Record<number, Migration> = {
     ...data,
     ledger: { foodGathered: 0, woodGathered: 0, foodRegrown: 0, woodRegrown: 0, foodEaten: 0 },
   }),
+  // v2 → v3 (M5): structures get an explicit construction stage, wood
+  // requirement and last-work tick (replacing `complete`); citizens get a
+  // death cause; the ledger counts goods lost with the dead.
+  2: (data) => {
+    const structures = (data.structures as Record<string, unknown>[]).map(({ complete, ...s }) => ({
+      ...s,
+      stage: complete ? 'complete' : 'planned',
+      woodRequired: s.woodDelivered ?? 0,
+      lastWorkTick: data.tick,
+    }))
+    const citizens = (data.citizens as Record<string, unknown>[]).map((c) => ({
+      ...c,
+      deathCause: c.alive === false ? 'starvation' : null,
+    }))
+    const ledger = { ...(data.ledger as Record<string, unknown>), foodLost: 0, woodLost: 0 }
+    return { ...data, structures, citizens, ledger }
+  },
 }
 
 export function serialize(state: WorldState): string {
@@ -114,12 +131,14 @@ function nullable<T>(v: unknown, path: string, check: (v: unknown, path: string)
 const RESOURCE_KINDS = ['berries', 'wood'] as const
 const ACTION_KINDS = ['eat', 'forage', 'chop', 'deliver', 'build', 'rest', 'socialize', 'explore', 'wander', 'idle'] as const
 const STRUCTURE_KINDS = ['campfire', 'shelter'] as const
+const STRUCTURE_STAGES = ['planned', 'underConstruction', 'complete'] as const
+const DEATH_CAUSES = ['starvation', 'exhaustion'] as const
 const MEMORY_KINDS = [
   'foundResource', 'resourceDepleted', 'chat', 'argument',
   'receivedFood', 'builtShelter', 'sawDeath', 'discovered',
 ] as const
 const EVENT_KINDS = [
-  'worldCreated', 'dayStarted', 'shelterStarted', 'shelterCompleted', 'chat', 'argument',
+  'worldCreated', 'dayStarted', 'shelterStarted', 'shelterCompleted', 'shelterAbandoned', 'movedIn', 'chat', 'argument',
   'sharedFood', 'discovered', 'starving', 'died', 'friendship', 'rivalry',
 ] as const
 
@@ -229,8 +248,11 @@ function validateWorld(d: Record<string, unknown>): asserts d is Record<string, 
       oneOf(score.kind, ACTION_KINDS, `${p}.lastScores[${j}].kind`)
       num(score.score, `${p}.lastScores[${j}].score`)
     })
-    bool(c.alive, `${p}.alive`)
-    nullable(c.diedTick, `${p}.diedTick`, (v, dp) => int(v, dp, 0))
+    const alive = bool(c.alive, `${p}.alive`)
+    const diedTick = nullable(c.diedTick, `${p}.diedTick`, (v, dp) => int(v, dp, 0))
+    const cause = nullable(c.deathCause, `${p}.deathCause`, (v, cp) => oneOf(v, DEATH_CAUSES, cp))
+    if (alive !== (diedTick === null) || alive !== (cause === null)) fail(`${p}`, 'alive, diedTick and deathCause to agree')
+    if (!alive && (c.task !== null || c.homeId !== null)) fail(`${p}`, 'dead citizens to have no task or home')
   })
 
   // Structures
@@ -240,18 +262,22 @@ function validateWorld(d: Record<string, unknown>): asserts d is Record<string, 
     uniqueId(s.id, `${p}.id`)
     oneOf(s.kind, STRUCTURE_KINDS, `${p}.kind`)
     tile(s.tile, `${p}.tile`)
-    num(s.buildProgress, `${p}.buildProgress`, 0)
-    num(s.buildCost, `${p}.buildCost`, 0)
-    num(s.woodDelivered, `${p}.woodDelivered`, 0)
-    bool(s.complete, `${p}.complete`)
-    arr(s.residentIds, `${p}.residentIds`).forEach((r, j) => id(r, `${p}.residentIds[${j}]`))
+    oneOf(s.stage, STRUCTURE_STAGES, `${p}.stage`)
+    const cost = int(s.buildCost, `${p}.buildCost`, 0)
+    int(s.buildProgress, `${p}.buildProgress`, 0, cost)
+    const required = int(s.woodRequired, `${p}.woodRequired`, 0)
+    int(s.woodDelivered, `${p}.woodDelivered`, 0, required)
+    int(s.lastWorkTick, `${p}.lastWorkTick`, 0)
+    const residents = arr(s.residentIds, `${p}.residentIds`)
+    residents.forEach((r, j) => id(r, `${p}.residentIds[${j}]`))
+    if (residents.length > SHELTER_CAPACITY) fail(`${p}.residentIds`, `at most ${SHELTER_CAPACITY} residents`)
   })
 
   const stock = obj(d.stockpile, 'stockpile')
   num(stock.food, 'stockpile.food', 0)
   num(stock.wood, 'stockpile.wood', 0)
   const ledger = obj(d.ledger, 'ledger')
-  for (const k of ['foodGathered', 'woodGathered', 'foodRegrown', 'woodRegrown', 'foodEaten']) {
+  for (const k of ['foodGathered', 'woodGathered', 'foodRegrown', 'woodRegrown', 'foodEaten', 'foodLost', 'woodLost']) {
     int(ledger[k], `ledger.${k}`, 0)
   }
 

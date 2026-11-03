@@ -3,10 +3,11 @@
 //
 //   satiety  −SATIETY_DECAY every tick; restored only by eating
 //   energy   ENERGY_RATES[activity]: idle/walking/working drain, sleeping refills
+//            (faster when sleeping inside one's own completed shelter)
 //   social   −SOCIAL_DECAY, or +SOCIAL_RECOVERY while someone is within SOCIAL_RADIUS
 //   health   falls while starving (satiety 0) or exhausted (energy 0), scaled
 //            down by resilience; recovers slowly while fed and rested.
-//            No death yet (M5).
+//            At health 0 the citizen dies (systems/death.ts).
 
 import {
   ENERGY_RATES,
@@ -23,16 +24,21 @@ import {
   type Activity,
 } from '../constants.ts'
 import { manhattan } from '../grid.ts'
+import { getHome } from '../structures.ts'
 import type { Citizen, WorldState } from '../types.ts'
+import { killCitizen } from './death.ts'
 
 export const clampNeed = (x: number) => (x < 0 ? 0 : x > 100 ? 100 : x)
 
 /** What the citizen's current task phase means for energy use. */
-export function activityOf(c: Citizen): Activity {
+export function activityOf(c: Citizen, state?: WorldState): Activity {
   const t = c.task
   if (!t) return 'idle'
-  if (t.phase === 'sleep') return 'resting'
-  if (t.phase === 'gather') return 'working'
+  if (t.phase === 'sleep') {
+    const home = state ? getHome(state, c) : undefined
+    return home && home.tile === c.pos.y * state!.map.width + c.pos.x ? 'restingHome' : 'resting'
+  }
+  if (t.phase === 'gather' || t.phase === 'construct') return 'working'
   if (c.pathIndex < c.path.length) return 'walking'
   return 'idle'
 }
@@ -42,7 +48,7 @@ export function updateNeeds(state: WorldState): void {
   for (const c of living) {
     const n = c.needs
     n.satiety = clampNeed(n.satiety - SATIETY_DECAY)
-    n.energy = clampNeed(n.energy + ENERGY_RATES[activityOf(c)])
+    n.energy = clampNeed(n.energy + ENERGY_RATES[activityOf(c, state)])
 
     const company = living.some((o) => o !== c && manhattan(o.pos, c.pos) <= SOCIAL_RADIUS)
     n.social = clampNeed(n.social + (company ? SOCIAL_RECOVERY : -SOCIAL_DECAY))
@@ -55,5 +61,6 @@ export function updateNeeds(state: WorldState): void {
       dh = HEALTH_RECOVERY
     }
     n.health = clampNeed(n.health + dh)
+    if (n.health <= 0) killCitizen(state, c, n.satiety <= 0 ? 'starvation' : 'exhaustion')
   }
 }

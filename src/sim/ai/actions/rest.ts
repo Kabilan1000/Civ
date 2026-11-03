@@ -12,7 +12,8 @@ export function scoreRest(ctx: DecisionContext): number {
   if (energy >= 90) return 0
   const tired = 1 - energy / 100
   const night = ctx.night ? NIGHT_REST_BONUS * Math.min(1, tired / 0.4) : 0
-  return clamp01(rising(tired, 0.1, 0.8) + night)
+  // Full urgency at 30% energy, leaving reserve for the walk home.
+  return clamp01(rising(tired, 0.1, 0.7) + night)
 }
 
 export function startRest(ctx: DecisionContext): boolean {

@@ -9,9 +9,10 @@
 // set before tick T, the citizen enters path[0] at the end of tick
 // T + cost(path[0]) - 1, path[1] cost(path[1]) ticks later, and so on.
 //
-// Safety: before every step the next tile must still be passable and a
-// 4-neighbour of the current position; otherwise the path is dropped and the
-// citizen stays where it is ('blocked'). Movement never skips tiles.
+// Safety: before every step the next tile must still be passable, accepted by
+// `canStep` (e.g. not a shelter that was planned after the path was made) and
+// a 4-neighbour of the current position; otherwise the path is dropped and
+// the citizen stays where it is ('blocked'). Movement never skips tiles.
 
 import { isAdjacent4, isPassable, stepCost, toPoint } from '../grid.ts'
 import type { Citizen, TileIndex, TileMap } from '../types.ts'
@@ -39,13 +40,17 @@ export function setPath(map: TileMap, c: Citizen, path: TileIndex[]): void {
 }
 
 /** Advance one tick of movement. */
-export function advanceMovement(map: TileMap, c: Citizen): MoveResult {
+export function advanceMovement(
+  map: TileMap,
+  c: Citizen,
+  canStep: (tile: TileIndex) => boolean = () => true,
+): MoveResult {
   if (!hasPath(c)) {
     clearPath(c)
     return 'idle'
   }
   const next = c.path[c.pathIndex]!
-  if (!isPassable(map, next) || !isAdjacent4(c.pos, toPoint(next, map.width))) {
+  if (!isPassable(map, next) || !canStep(next) || !isAdjacent4(c.pos, toPoint(next, map.width))) {
     clearPath(c)
     return 'blocked'
   }
@@ -60,7 +65,8 @@ export function advanceMovement(map: TileMap, c: Citizen): MoveResult {
     clearPath(c)
     return 'arrived'
   }
-  const cost = stepCost(map, c.path[c.pathIndex]!)
+  const upcoming = c.path[c.pathIndex]!
+  const cost = canStep(upcoming) ? stepCost(map, upcoming) : null
   if (cost === null) {
     clearPath(c)
     return 'blocked'

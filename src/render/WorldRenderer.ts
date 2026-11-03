@@ -7,19 +7,35 @@
 //   resources   one small sprite per bush/tree with shared per-depletion-
 //               level textures (ResourceSprites); synced when map.version
 //               changes — swapping a texture, never re-baking
-//   structures  rebuilt when their summary changes
+//   structures  rebuilt when their summary changes (stage, wood, progress)
 //   citizens    one small Container each, repositioned every frame
+//   lights      campfire glow and lit shelter windows, additive blend
+// Day/night: the map, resource and structure layers are TINTED by the
+// clock (render/daylight.ts) and citizens get a lighter tint — a colour
+// multiply with no extra fill — while light sources grow brighter at night.
+// No full-screen overlay is drawn.
 // Fill cost per frame ≈ one map-sized quad plus tiny sprites, which keeps
 // software-rendered GPUs fast. Resources under fog are dimmed via alpha.
 // The Pixi ticker is disabled: the SimulationController's single
 // requestAnimationFrame loop calls render().
 
 import { Application, Container, Graphics } from 'pixi.js'
-import { getVisualPosition, toPoint, type Citizen, type Terrain, type TileMap, type WorldState } from '../sim/index.ts'
+import {
+  MINUTES_PER_TICK,
+  getVisualPosition,
+  minuteOfDayAt,
+  toPoint,
+  type Citizen,
+  type Structure,
+  type Terrain,
+  type TileMap,
+  type WorldState,
+} from '../sim/index.ts'
 import type { FrameRenderer } from '../app/SimulationController.ts'
 import { AppLifecycle } from './AppLifecycle.ts'
 import { BakedLayer } from './BakedLayer.ts'
 import { ResourceSprites } from './ResourceSprites.ts'
+import { lightingAt } from './daylight.ts'
 import { fitWorld } from './layout.ts'
 import { COLORS, ROLE_COLORS, TERRAIN_COLORS, TILE_SIZE, shade, tileNoise } from './palette.ts'
 
@@ -75,8 +91,10 @@ export class WorldRenderer implements FrameRenderer {
   private bakedScale = 0
   private readonly structures = new Container()
   private readonly citizens = new Container()
+  private readonly lights = new Container()
   private readonly citizenViews = new Map<number, CitizenView>()
   private readonly fireGlows: Graphics[] = []
+  private lastTint = -1
 
   private mapRef: TileMap | null = null
   private mapVersion = -1
@@ -87,7 +105,8 @@ export class WorldRenderer implements FrameRenderer {
   constructor(parent: HTMLElement) {
     this.parent = parent
     this.mapLayer.source.addChild(this.terrain, this.fog)
-    this.world.addChild(this.mapLayer.sprite, this.resources.container, this.structures, this.citizens)
+    this.lights.blendMode = 'add'
+    this.world.addChild(this.mapLayer.sprite, this.resources.container, this.structures, this.citizens, this.lights)
   }
 
   /** Resolves true when ready, false if destroyed before initialisation finished. */
@@ -180,13 +199,14 @@ export class WorldRenderer implements FrameRenderer {
       this.resources.sync(state.map)
     }
 
-    const key = state.structures.map((s) => `${s.id}:${s.kind}:${s.tile}:${s.complete}`).join('|')
+    const key = state.structures.map((s) => `${s.id}:${s.kind}:${s.tile}:${s.stage}:${s.woodDelivered}:${Math.floor((s.buildProgress / Math.max(1, s.buildCost)) * 4)}`).join('|')
     if (key !== this.structuresKey) {
       this.structuresKey = key
       this.drawStructures(state)
     }
 
     this.updateCitizens(state, alpha)
+    this.applyLighting(minuteOfDayAt(state.tick) + alpha * MINUTES_PER_TICK)
     this.animateFire()
     app.render()
   }
@@ -219,23 +239,51 @@ export class WorldRenderer implements FrameRenderer {
     })
   }
 
+  /** Tint layers for the time of day; only touches Pixi when the tint actually changes. */
+  private applyLighting(minuteOfDay: number): void {
+    const light = lightingAt(minuteOfDay)
+    if (light.sceneTint === this.lastTint) return
+    this.lastTint = light.sceneTint
+    this.mapLayer.sprite.tint = light.sceneTint
+    this.resources.container.tint = light.sceneTint
+    this.structures.tint = light.sceneTint
+    this.citizens.tint = light.citizenTint
+    this.lights.alpha = light.lightAlpha
+  }
+
   private drawStructures(state: WorldState): void {
-    for (const child of this.structures.removeChildren()) child.destroy({ children: true })
+    for (const layer of [this.structures, this.lights]) {
+      for (const child of layer.removeChildren()) child.destroy({ children: true })
+    }
     this.fireGlows.length = 0
     for (const s of state.structures) {
       const { x, y } = toPoint(s.tile, state.map.width)
+      const cx = x * TILE_SIZE + TILE_SIZE / 2
+      const cy = y * TILE_SIZE + TILE_SIZE / 2
       const view = new Container()
-      view.position.set(x * TILE_SIZE + TILE_SIZE / 2, y * TILE_SIZE + TILE_SIZE / 2)
+      view.position.set(cx, cy)
       if (s.kind === 'campfire') {
-        const glow = new Graphics().circle(0, 0, TILE_SIZE * 1.6).fill({ color: COLORS.glow, alpha: 0.14 })
         const logs = new Graphics()
           .rect(-8, 2, 16, 4).fill(COLORS.log)
           .rect(-2, -4, 4, 12).fill(shade(COLORS.log, 0.85))
         const flame = new Graphics()
           .circle(0, -1, 5.5).fill(COLORS.flame)
           .circle(0, 0, 2.8).fill(COLORS.flameCore)
-        view.addChild(glow, logs, flame)
+        view.addChild(logs, flame)
+        // The glow lives in the untinted, additive lights layer so it shines at night.
+        const glow = new Graphics()
+          .circle(0, 0, TILE_SIZE * 2.2).fill({ color: COLORS.glow, alpha: 0.35 })
+          .circle(0, 0, TILE_SIZE * 1.1).fill({ color: COLORS.glow, alpha: 0.45 })
+        glow.position.set(cx, cy)
+        this.lights.addChild(glow)
         this.fireGlows.push(glow)
+      } else {
+        view.addChild(drawShelter(s))
+        if (s.stage === 'complete') {
+          const window = new Graphics().rect(-7, -1, 4, 4).fill({ color: COLORS.windowLight, alpha: 0.9 })
+          window.position.set(cx, cy)
+          this.lights.addChild(window)
+        }
       }
       this.structures.addChild(view)
     }
@@ -290,6 +338,8 @@ export class WorldRenderer implements FrameRenderer {
         view.asleep = asleep
         view.body.alpha = asleep ? 0.5 : 1
       }
+      // Asleep inside their own shelter: drawn as the lit house, not a dot on the roof.
+      view.root.visible = !(asleep && c.homeId !== null && c.task?.targetTile === c.pos.y * state.map.width + c.pos.x)
     }
     for (const [id, view] of this.citizenViews) {
       if (seen.has(id)) continue
@@ -297,4 +347,30 @@ export class WorldRenderer implements FrameRenderer {
       this.citizenViews.delete(id)
     }
   }
+}
+
+/** Shelter by stage: planned = staked outline + delivered logs; under construction = rising frame; complete = house. */
+function drawShelter(s: Structure): Graphics {
+  const g = new Graphics()
+  const h = TILE_SIZE / 2 - 2
+  if (s.stage === 'planned') {
+    for (const [px, py] of [[-h, -h], [h, -h], [-h, h], [h, h]] as const) g.rect(px - 1.5, py - 1.5, 3, 3).fill(COLORS.stake)
+    g.rect(-h, -h, 2 * h, 2 * h).stroke({ width: 1, color: COLORS.stake, alpha: 0.7 })
+    const logs = Math.ceil((s.woodDelivered / Math.max(1, s.woodRequired)) * 4)
+    for (let k = 0; k < logs; k++) g.rect(-6, 5 - k * 3, 12, 2.2).fill(COLORS.log)
+    return g
+  }
+  if (s.stage === 'underConstruction') {
+    const t = s.buildProgress / Math.max(1, s.buildCost)
+    const wallTop = h - (2 * h - 4) * t
+    g.rect(-h, -h + 4, 2 * h, 2 * h - 4).stroke({ width: 1.5, color: COLORS.log, alpha: 0.9 })
+    g.rect(-h, wallTop, 2 * h, h - wallTop).fill(COLORS.wall)
+    g.poly([-h - 1, -h + 4, 0, -h - 4, h + 1, -h + 4]).stroke({ width: 1.5, color: COLORS.log })
+    return g
+  }
+  g.rect(-h, -h + 4, 2 * h, 2 * h - 4).fill(COLORS.wall).stroke({ width: 1, color: shade(COLORS.wall, 0.6) })
+  g.poly([-h - 2, -h + 5, 0, -h - 4, h + 2, -h + 5]).fill(COLORS.roof)
+  g.rect(1, 0, 5, h).fill(shade(COLORS.wall, 0.45)) // door
+  g.rect(-7, -1, 4, 4).fill(shade(COLORS.wall, 0.55)) // window (lit at night by the lights layer)
+  return g
 }

@@ -84,6 +84,7 @@ function observe(seed: string, ticks: number) {
   const state = createWorld({ seed })
   const prev = state.citizens.map((c) => ({ ...c.pos }))
   const lastMoveTick = state.citizens.map(() => -1)
+  const lastMovePath = state.citizens.map((): number[] | null => null)
   let moves = 0
   let timedSteps = 0
   const destinations: number[] = []
@@ -109,11 +110,13 @@ function observe(seed: string, ticks: number) {
       if (p.x !== c.pos.x || p.y !== c.pos.y) {
         expect(isAdjacent4(p, c.pos)).toBe(true) // no teleport, no diagonal
         // Consecutive steps along one path are spaced by the entered tile's cost.
-        if (lastMoveTick[i]! >= 0 && c.task?.startedTick !== undefined && c.task.startedTick < lastMoveTick[i]!) {
+        const onSamePath = lastMovePath[i] !== null && lastMovePath[i] === c.path
+        if (onSamePath && lastMoveTick[i]! >= 0) {
           expect(state.tick - lastMoveTick[i]!).toBe(stepCost(state.map, tile))
           timedSteps++
         }
         lastMoveTick[i] = state.tick
+        lastMovePath[i] = c.path.length > 0 ? c.path : null
         moves++
         prev[i] = { ...c.pos }
       }
@@ -145,13 +148,14 @@ describe('wandering', () => {
     }
   })
 
-  it('never recomputes a path mid-walk (path only changes when a task starts)', () => {
+  it('never recomputes a path mid-walk (only when a task starts or a build task leaves camp with wood)', () => {
     const state = createWorld({ seed: 'no-repath' })
     for (let t = 0; t < 1000; t++) {
-      const before = state.citizens.map((c) => ({ path: c.path, task: c.task }))
+      const before = state.citizens.map((c) => ({ path: c.path, task: c.task, phase: c.task?.phase }))
       step(state)
       state.citizens.forEach((c, i) => {
-        if (c.path.length > 0 && c.path !== before[i]!.path) expect(c.task).not.toBe(before[i]!.task)
+        const b = before[i]!
+        if (c.path.length > 0 && c.path !== b.path && c.task === b.task) expect(b.phase).toBe('fetch')
       })
     }
   })

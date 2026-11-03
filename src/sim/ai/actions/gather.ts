@@ -6,8 +6,10 @@ import {
   FOOD_RESERVE_PER_CITIZEN,
   NIGHT_WORK_FACTOR,
   ROLE_WEIGHTS,
+  SHELTER_WOOD,
   WOOD_TARGET,
 } from '../../constants.ts'
+import { housingWoodNeed } from '../../structures.ts'
 import type { ResourceKind } from '../../types.ts'
 import { clamp01, distanceFactor } from '../curves.ts'
 import type { DecisionContext } from '../context.ts'
@@ -33,7 +35,9 @@ function scoreGather(ctx: DecisionContext, kind: ResourceKind): number {
     const hunger = 1 - c.needs.satiety / 100
     demand = MIN_DEMAND + (1 - MIN_DEMAND) * Math.max(shortage, hunger)
   } else {
-    demand = MIN_DEMAND + (1 - MIN_DEMAND) * (1 - Math.min(1, stock.wood / WOOD_TARGET))
+    // Housing raises the wood target so builders keep chopping until homes are built.
+    const target = WOOD_TARGET + housingWoodNeed(ctx.state, SHELTER_WOOD)
+    demand = MIN_DEMAND + (1 - MIN_DEMAND) * (1 - Math.min(1, stock.wood / target))
   }
 
   const action = kind === 'berries' ? 'forage' : 'chop'

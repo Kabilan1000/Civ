@@ -133,18 +133,34 @@ export interface Citizen {
   lastScores: ActionScore[]
   alive: boolean
   diedTick: number | null
+  deathCause: DeathCause | null
 }
 
+export type DeathCause = 'starvation' | 'exhaustion'
+
 export type StructureKind = 'campfire' | 'shelter'
+
+/**
+ * planned             site chosen; waiting for all woodRequired to be delivered
+ * underConstruction   all wood delivered; builders add labour ticks
+ * complete            buildProgress reached buildCost; houses residents
+ */
+export type StructureStage = 'planned' | 'underConstruction' | 'complete'
 
 export interface Structure {
   id: number
   kind: StructureKind
   tile: TileIndex
+  stage: StructureStage
+  /** Labour ticks done / needed. */
   buildProgress: number
   buildCost: number
+  /** Wood handed over to the site / needed. Delivered wood is held by the site. */
   woodDelivered: number
-  complete: boolean
+  woodRequired: number
+  /** Last tick wood was delivered or labour done; used to abandon stale sites. */
+  lastWorkTick: number
+  /** Living citizens who live here (shelters only), ascending id. */
   residentIds: number[]
 }
 
@@ -153,6 +169,8 @@ export type SimEventKind =
   | 'dayStarted'
   | 'shelterStarted'
   | 'shelterCompleted'
+  | 'shelterAbandoned'
+  | 'movedIn'
   | 'chat'
   | 'argument'
   | 'sharedFood'
@@ -178,8 +196,10 @@ export interface Stockpile {
 /**
  * Cumulative resource accounting since world creation (all non-negative
  * integers). Lets tests and the dashboard check conservation:
- *   food on map + food carried + stockpile.food + foodEaten
+ *   food on map + carried + stockpile.food + foodEaten + foodLost
  *     = initial food + foodRegrown
+ *   wood on map + carried + stockpile.wood + wood held by structures + woodLost
+ *     = initial wood + woodRegrown
  */
 export interface Ledger {
   foodGathered: number
@@ -187,6 +207,9 @@ export interface Ledger {
   foodRegrown: number
   woodRegrown: number
   foodEaten: number
+  /** Carried goods that perished with a citizen who died. */
+  foodLost: number
+  woodLost: number
 }
 
 export interface WorldConfig {

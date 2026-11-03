@@ -74,9 +74,11 @@ describe('needs', () => {
 
   it('clamps every need to 0..100', () => {
     const { state, citizens: [c] } = lone()
-    c!.needs = { satiety: 0.05, energy: 0.05, social: 0.05, health: 0.01 }
+    c!.needs = { satiety: 0.05, energy: 0.05, social: 0.05, health: 50 }
     updateNeeds(state)
-    for (const v of Object.values(c!.needs)) expect(v).toBe(0)
+    expect(c!.needs.satiety).toBe(0)
+    expect(c!.needs.energy).toBe(0)
+    expect(c!.needs.social).toBe(0)
     c!.needs = { satiety: 100, energy: 99.9, social: 100, health: 100 }
     c!.task = { kind: 'rest', phase: 'sleep', targetTile: 0, targetId: null, ticksLeft: 0, startedTick: 0 }
     updateNeeds(state)

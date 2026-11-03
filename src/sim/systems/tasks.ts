@@ -8,6 +8,12 @@
 //            stockpile if within CAMP_RADIUS; ends at EAT_STOP_SATIETY or
 //            when no food is left
 //   sleep    energy refills via the needs system; ends at REST_STOP_ENERGY
+//   fetch    (build) at camp: take the wood the site still needs from the
+//            stockpile, then walk on to the site to supply it
+//   supply   (build) next to the site: hand carried wood over (never more
+//            than the site needs; extra stays carried); continue to
+//            construct once fully supplied
+//   construct (build) next to the site: +1 labour per tick until complete
 //   linger   wait, then end
 // Transfers move whole units and are mirrored in state.ledger, so food and
 // wood are conserved. A finished or failed task makes the citizen decide
@@ -17,8 +23,11 @@ import { CAMP_RADIUS, CARRY_CAPACITY, EAT_STOP_SATIETY, EAT_TICKS, FOOD_SATIETY,
 import { getCampTile } from '../ai/context.ts'
 import { enterArrivalPhase } from '../ai/phases.ts'
 import { manhattan, toPoint } from '../grid.ts'
-import type { Citizen, WorldState } from '../types.ts'
-import { advanceMovement, clearPath } from './movement.ts'
+import { findPath } from '../path/astar.ts'
+import { walkableFor, woodStillNeeded, workTiles } from '../structures.ts'
+import type { Citizen, Structure, WorldState } from '../types.ts'
+import { supplySite, workOnSite } from './construction.ts'
+import { advanceMovement, clearPath, setPath } from './movement.ts'
 import { clampNeed } from './needs.ts'
 
 export function endTask(state: WorldState, c: Citizen): void {
@@ -82,6 +91,74 @@ function eat(state: WorldState, c: Citizen): void {
   else task.ticksLeft = EAT_TICKS
 }
 
+function taskSite(state: WorldState, c: Citizen): Structure | undefined {
+  const id = c.task?.targetId
+  return id === null || id === undefined ? undefined : state.structures.find((s) => s.id === id && s.kind === 'shelter')
+}
+
+function besideSite(state: WorldState, c: Citizen, site: Structure): boolean {
+  return manhattan(c.pos, toPoint(site.tile, state.map.width)) === 1
+}
+
+function fetchWood(state: WorldState, c: Citizen): void {
+  const site = taskSite(state, c)
+  if (!site || site.stage !== 'planned' || !isAtCamp(state, c) || (c.carrying && c.carrying.kind !== 'wood')) {
+    endTask(state, c)
+    return
+  }
+  const carried = c.carrying?.amount ?? 0
+  const take = Math.min(CARRY_CAPACITY.wood - carried, woodStillNeeded(state, site), state.stockpile.wood)
+  if (take > 0) {
+    state.stockpile.wood -= take
+    c.carrying = { kind: 'wood', amount: carried + take }
+  }
+  if (!c.carrying) {
+    endTask(state, c)
+    return
+  }
+  // Carry it on (same task): nearest reachable work tile by path length, then tile index.
+  const here = c.pos.y * state.map.width + c.pos.x
+  const walk = walkableFor(state, c)
+  let best: { tile: number; path: number[] } | null = null
+  for (const tile of workTiles(state, site)) {
+    const path = findPath(state.map, here, tile, { canEnter: walk })
+    if (path && (!best || path.length < best.path.length || (path.length === best.path.length && tile < best.tile))) {
+      best = { tile, path }
+    }
+  }
+  if (!best) {
+    endTask(state, c) // keeps the wood; a later decision can deliver it
+    return
+  }
+  const task = c.task!
+  task.targetTile = best.tile
+  task.phase = 'moveTo'
+  setPath(state.map, c, best.path)
+  if (best.path.length === 0) enterArrivalPhase(state, c)
+}
+
+function supply(state: WorldState, c: Citizen): void {
+  const site = taskSite(state, c)
+  const carry = c.carrying
+  if (!site || !carry || carry.kind !== 'wood' || !besideSite(state, c, site)) {
+    endTask(state, c)
+    return
+  }
+  carry.amount -= supplySite(state, site, carry.amount)
+  if (carry.amount <= 0) c.carrying = null
+  if (site.stage === 'underConstruction') c.task!.phase = 'construct'
+  else endTask(state, c)
+}
+
+function construct(state: WorldState, c: Citizen): void {
+  const site = taskSite(state, c)
+  if (!site || site.stage !== 'underConstruction' || !besideSite(state, c, site)) {
+    endTask(state, c)
+    return
+  }
+  if (workOnSite(state, site)) endTask(state, c)
+}
+
 export function advanceTasks(state: WorldState): void {
   for (const c of state.citizens) {
     const task = c.task
@@ -89,7 +166,7 @@ export function advanceTasks(state: WorldState): void {
 
     switch (task.phase) {
       case 'moveTo': {
-        const result = advanceMovement(state.map, c)
+        const result = advanceMovement(state.map, c, walkableFor(state, c))
         if (result === 'arrived') enterArrivalPhase(state, c)
         else if (result !== 'moving') endTask(state, c)
         break
@@ -105,6 +182,15 @@ export function advanceTasks(state: WorldState): void {
         break
       case 'sleep':
         if (c.needs.energy >= REST_STOP_ENERGY) endTask(state, c)
+        break
+      case 'fetch':
+        fetchWood(state, c)
+        break
+      case 'supply':
+        supply(state, c)
+        break
+      case 'construct':
+        construct(state, c)
         break
       case 'linger':
         if (--task.ticksLeft <= 0) endTask(state, c)

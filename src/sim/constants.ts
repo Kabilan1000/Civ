@@ -2,7 +2,7 @@
 import type { Needs, Role, Stockpile, Terrain } from './types.ts'
 
 /** Bump whenever the serialized WorldState shape changes, and add a migration. */
-export const SCHEMA_VERSION = 2
+export const SCHEMA_VERSION = 3
 
 // ── Time ────────────────────────────────────────────────────────────────────
 
@@ -140,6 +140,8 @@ export const ENERGY_RATES = {
   walking: -0.3,
   working: -0.4,
   resting: 0.8,
+  /** Sleeping in one's own completed shelter. */
+  restingHome: 1.2,
 } as const
 export type Activity = keyof typeof ENERGY_RATES
 
@@ -177,7 +179,26 @@ export const REST_STOP_ENERGY = 98
 
 /** Every N ticks each non-full node regrows one unit. */
 export const BERRY_REGROW_INTERVAL = 48 // 5 units per bush per day
-export const TREE_REGROW_INTERVAL = 480 // 1 unit per tree every two days
+export const TREE_REGROW_INTERVAL = 160 // 1.5 units per tree per day
+
+// ── Construction & housing ──────────────────────────────────────────────────
+// Balance: 4 shelters house 12 citizens and cost 48 wood. Builders gather
+// ≈4 wood per 25 ticks each, so the wood takes ~2 days of the builders' work;
+// labour is 2–3 hours per shelter with two workers.
+
+export const SHELTER_WOOD = 12
+/** Labour ticks per shelter (one builder adds one per tick). */
+export const SHELTER_WORK_TICKS = 60
+export const SHELTER_CAPACITY = 3
+/** At most this many citizens work on (haul to or build) one site at a time. */
+export const MAX_SITE_WORKERS = 2
+/** Shelters are placed this far from the campfire (Manhattan, inclusive). */
+export const SITE_MIN_CAMP_DISTANCE = 3
+export const SITE_MAX_CAMP_DISTANCE = 6
+/** How often (ticks) the village considers planning a new shelter. */
+export const PLAN_INTERVAL = 10
+/** A site with no delivery or labour for this long is abandoned (wood refunded). */
+export const SITE_ABANDON_TICKS = 480
 
 // ── Utility AI ──────────────────────────────────────────────────────────────
 
@@ -185,22 +206,22 @@ export const TREE_REGROW_INTERVAL = 480 // 1 unit per tree every two days
 export const SWITCH_MARGIN = 0.2
 /** Below these, the margin is waived for eat / rest. */
 export const CRITICAL_SATIETY = 15
-export const CRITICAL_ENERGY = 10
+export const CRITICAL_ENERGY = 25 // high enough that a far-off worker still gets home
 /** Random jitter added to each score (seeded), for variety. */
 export const SCORE_JITTER = 0.02
 /** Travel distance (BFS steps) at which the distance factor bottoms out at 1/3. */
 export const DISTANCE_FALLOFF_STEPS = 40
 /** Village wants this much food per living citizen in the stockpile. */
 export const FOOD_RESERVE_PER_CITIZEN = 6
-/** Village wants this much wood stockpiled (for shelters in M5). */
-export const WOOD_TARGET = 40
+/** Spare wood the village keeps in reserve; housing wood is added on top (structures.housingWoodNeed). */
+export const WOOD_TARGET = 20
 /** Scores at night are multiplied by this for outdoor work. */
 export const NIGHT_WORK_FACTOR = 0.5
 export const NIGHT_REST_BONUS = 0.35
 
 /** Role multipliers on work scores (missing = 1). */
-export const ROLE_WEIGHTS: Readonly<Record<Role, Partial<Record<'forage' | 'chop' | 'wander', number>>>> = {
-  forager: { forage: 1.3, chop: 0.5 },
-  builder: { forage: 0.6, chop: 1.3 },
-  explorer: { forage: 0.8, chop: 0.7, wander: 1.5 },
+export const ROLE_WEIGHTS: Readonly<Record<Role, Partial<Record<'forage' | 'chop' | 'build' | 'wander', number>>>> = {
+  forager: { forage: 1.3, chop: 0.5, build: 0.4 },
+  builder: { forage: 0.6, chop: 1.3, build: 1.4 },
+  explorer: { forage: 0.8, chop: 0.7, build: 0.5, wander: 1.5 },
 }

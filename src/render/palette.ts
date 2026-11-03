@@ -31,6 +31,10 @@ export const COLORS = {
   flameCore: 0xffe08a,
   glow: 0xffb347,
   outline: 0xffffff,
+  wall: 0xc8a06a,
+  roof: 0x8e3b2c,
+  stake: 0xe8d9b5,
+  windowLight: 0xffd36b,
   shadow: 0x000000,
 } as const
 

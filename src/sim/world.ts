@@ -6,6 +6,7 @@ import { allocateId } from './ids.ts'
 import { revealAround } from './map/discovery.ts'
 import { generateMap } from './map/generate.ts'
 import { seedRng } from './rng.ts'
+import { updateConstruction } from './systems/construction.ts'
 import { decide } from './systems/decide.ts'
 import { updateNeeds } from './systems/needs.ts'
 import { regrowResources } from './systems/resources.ts'
@@ -18,10 +19,12 @@ function createCampfire(id: number, tile: TileIndex): Structure {
     id,
     kind: 'campfire',
     tile,
+    stage: 'complete',
     buildProgress: 0,
     buildCost: 0,
     woodDelivered: 0,
-    complete: true,
+    woodRequired: 0,
+    lastWorkTick: 0,
     residentIds: [],
   }
 }
@@ -49,7 +52,7 @@ export function createWorld(overrides: Partial<WorldConfig> = {}): WorldState {
     citizens: [],
     structures: [],
     stockpile: { ...INITIAL_STOCKPILE },
-    ledger: { foodGathered: 0, woodGathered: 0, foodRegrown: 0, woodRegrown: 0, foodEaten: 0 },
+    ledger: { foodGathered: 0, woodGathered: 0, foodRegrown: 0, woodRegrown: 0, foodEaten: 0, foodLost: 0, woodLost: 0 },
     events: [],
   }
 
@@ -66,13 +69,14 @@ export function createWorld(overrides: Partial<WorldConfig> = {}): WorldState {
 /**
  * Advance the world by exactly one tick, mutating it in place.
  * System order is fixed (see docs/ARCHITECTURE.md §3.4):
- * time → needs (incl. health) → resources → decide → act.
+ * time → needs (incl. health, death) → resources → construction → decide → act.
  * Social and stats systems (M6/M7) will follow act.
  */
 export function step(state: WorldState): void {
   advanceTime(state)
   updateNeeds(state)
   regrowResources(state)
+  updateConstruction(state)
   decide(state)
   advanceTasks(state)
 }

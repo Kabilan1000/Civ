@@ -4,8 +4,9 @@
 import { REST_RADIUS } from '../constants.ts'
 import { isPassable, manhattan, toIndex, toPoint } from '../grid.ts'
 import { distanceField } from '../path/flood.ts'
+import { getHome, getOpenSite, solidTiles, walkableFor, workTiles } from '../structures.ts'
 import { dayPhaseAt } from '../systems/time.ts'
-import type { Citizen, ResourceKind, TileIndex, WorldState } from '../types.ts'
+import type { Citizen, ResourceKind, Structure, TileIndex, WorldState } from '../types.ts'
 
 export interface Target {
   tile: TileIndex
@@ -27,8 +28,12 @@ export interface DecisionContext {
   /** Nearest discovered, reachable, non-empty node not targeted by another citizen. */
   berries: Target | null
   wood: Target | null
-  /** Nearest reachable rest spot near the campfire. */
+  /** Where to sleep: own completed home if reachable, else nearest spot near the campfire. */
   restSpot: Target | null
+  restAtHome: boolean
+  /** The open construction site and the nearest reachable tile to work it from. */
+  site: Structure | null
+  siteWorkTile: Target | null
 }
 
 export function getCampTile(state: WorldState): TileIndex | null {
@@ -59,7 +64,7 @@ function nearest(steps: Int32Array, accept: (tile: TileIndex) => boolean): Targe
 export function buildContext(state: WorldState, c: Citizen): DecisionContext {
   const { map } = state
   const here = toIndex(c.pos.x, c.pos.y, map.width)
-  const steps = distanceField(map, here, (t) => map.discovered[t] === 1)
+  const steps = distanceField(map, here, walkableFor(state, c))
   const campTile = getCampTile(state)
   const campSteps = campTile === null ? -1 : steps[campTile]!
   const reserved = reservedTiles(state, c)
@@ -70,10 +75,23 @@ export function buildContext(state: WorldState, c: Citizen): DecisionContext {
       return node !== null && node !== undefined && node.kind === kind && node.amount > 0 && !reserved.has(t)
     })
 
-  let restSpot: Target | null = null
-  if (campTile !== null && campSteps >= 0) {
+  const solid = solidTiles(state)
+  const home = getHome(state, c)
+  let restSpot: Target | null = home && steps[home.tile]! >= 0 ? { tile: home.tile, steps: steps[home.tile]! } : null
+  const restAtHome = restSpot !== null
+  if (!restSpot && campTile !== null && campSteps >= 0) {
     const camp = toPoint(campTile, map.width)
-    restSpot = nearest(steps, (t) => isPassable(map, t) && manhattan(toPoint(t, map.width), camp) <= REST_RADIUS)
+    restSpot = nearest(
+      steps,
+      (t) => isPassable(map, t) && !solid.has(t) && manhattan(toPoint(t, map.width), camp) <= REST_RADIUS,
+    )
+  }
+
+  const site = getOpenSite(state) ?? null
+  let siteWorkTile: Target | null = null
+  if (site) {
+    const options = new Set(workTiles(state, site))
+    siteWorkTile = nearest(steps, (t) => options.has(t))
   }
 
   return {
@@ -88,5 +106,8 @@ export function buildContext(state: WorldState, c: Citizen): DecisionContext {
     berries: resource('berries'),
     wood: resource('wood'),
     restSpot,
+    restAtHome,
+    site,
+    siteWorkTile,
   }
 }

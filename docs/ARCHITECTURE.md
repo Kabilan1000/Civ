@@ -55,7 +55,7 @@ Allowed imports (enforced by an architecture test, see §9):
 | `render/`      | `sim/` (types, selectors), `pixi.js`|
 | `persistence/` | `sim/` (serialize)                  |
 | `app/`         | `sim/`, `render/`, `persistence/`   |
-| `ui/`          | `app/`, `sim/` (types, selectors)   |
+| `ui/`          | `app/`, `sim/` (types, selectors), `render/` (MapView lazy-loads the renderer) |
 
 ---
 
@@ -117,8 +117,9 @@ Each tick runs systems in a fixed order:
 7. **social** — resolve conversations between adjacent citizens.
 8. **stats** — sample civilization metrics (every 24 ticks) for the dashboard.
 
-Implemented so far (M4): `time → needs (incl. health) → resources → decide →
-act` (`systems/time.ts`, `needs.ts`, `resources.ts`, `decide.ts`, `tasks.ts`). The other systems slot into the
+Implemented so far (M5): `time → needs (incl. health, death) → resources →
+construction → decide → act` (`systems/time.ts`, `needs.ts`, `death.ts`,
+`resources.ts`, `construction.ts`, `decide.ts`, `tasks.ts`). The other systems slot into the
 positions above as their milestones land.
 
 ### 3.5 Map
@@ -200,9 +201,9 @@ for a 240-tick day:
 | Need    | Change per tick | Per day / notes |
 | ------- | --------------- | --------------- |
 | satiety | −0.2 | −48/day → ≈2 food (25 satiety each) per citizen per day |
-| energy  | idle −0.2, walking −0.3, working −0.4, sleeping +0.8 | awake drain ≈50/day, refilled by ≈65 ticks (6.5 h) of sleep |
+| energy  | idle −0.2, walking −0.3, working (gather/construct) −0.4, sleeping outdoors +0.8, sleeping in own shelter +1.2 | awake drain ≈50/day, refilled by ≈65 ticks of sleep outdoors or ≈42 at home |
 | social  | −0.12 alone, +0.4 with someone within 2 tiles | social *actions* come in M6 |
-| health  | −0.15 at satiety 0, −0.1 at energy 0 (×(1 − 0.5·resilience)); +0.05 when satiety ≥ 40 and energy ≥ 25 | no death until M5 |
+| health  | −0.15 at satiety 0, −0.1 at energy 0 (×(1 − 0.5·resilience)); +0.05 when satiety ≥ 40 and energy ≥ 25 | death at 0: a starving citizen (resilience 0) dies ≈667 ticks (2.8 days) after satiety hits 0 |
 
 Activity comes from the task phase: `sleep` → resting, `gather` → working,
 following a path → walking, otherwise idle.
@@ -261,10 +262,52 @@ only, planned once) → arrival phase (`ai/phases.ts`): `gather`, `deposit`,
   counts gathered, regrown and eaten units so that, at every tick,
   `map + carried + stockpile + eaten − regrown` is constant for food and
   `map + carried + stockpile − regrown` for wood (tested every tick).
-- **Shelters**: when there are homeless citizens and stockpile wood ≥ cost, a
-  builder places a construction site near the campfire, hauls wood and adds
-  build progress. A complete shelter houses up to 3 citizens. Resting in a home
-  restores energy faster than sleeping rough.
+- **Shelters** (M5, `systems/construction.ts`, `structures.ts`,
+  `ai/actions/build.ts`):
+  - **Cost:** 12 wood + 60 labour ticks; houses 3. Four shelters (48 wood)
+    house the 12 starting citizens; with two builders on site, labour takes
+    ≈30 ticks (3 h). In a 30-seed sweep all villages were fully housed by
+    day 9, 26/30 by day 5.
+  - **Stages:** `planned` (site chosen, waiting for wood) → `underConstruction`
+    (all wood delivered; labour adds `buildProgress`) → `complete`.
+  - **Planning:** every 10 ticks, if living citizens exceed shelter capacity
+    (planned shelters included) and no shelter is unfinished, ONE site is
+    planned on the nearest valid tile to the campfire.
+  - **Valid sites:** discovered grass/sand/treeless forest with no resource
+    node (bushes and trees — even depleted, they regrow), not another
+    structure or an occupied tile, Manhattan 3–6 from the campfire, no other
+    shelter in its 8 neighbours, and — critical-route rule — making the tile
+    solid must not cut off anything reachable from the campfire.
+  - **Solidity:** shelters block movement (A* and the per-step check), except
+    a resident entering their own completed home. A site planned on someone's
+    path makes that path "blocked" → the task ends and they replan.
+  - **Build action:** `fetch` (at camp take `min(capacity, still-needed after
+    wood in transit, stockpile)`) → carry on to a work tile next to the site
+    → `supply` (site accepts at most what it still needs) → `construct`
+    (+1 labour per worker per tick). At most 2 workers per site. Not offered
+    for unreachable sites or when nothing can be done. Score: 0.55 × role
+    (builder 1.4, explorer 0.5, forager 0.4) × diligence × distance × ½ at
+    night; eat/rest still win when urgent (critical needs waive the switch
+    margin).
+  - **Wood demand:** the chop target becomes `20 + wood still needed for the
+    open site + 12 per further shelter needed`, so builders keep chopping
+    until everyone is housed.
+  - **Interruptions & abandonment:** progress and delivered wood live on the
+    site, so any builder resumes. A site with no delivery or labour for 480
+    ticks is removed and its wood refunded to the stockpile.
+- **Homes:** `assignHomes` runs when a shelter completes and when someone
+  dies: living residents stay; free slots are filled by homeless living
+  citizens in ascending id, shelters in ascending id. Rest targets the
+  citizen's home when reachable (energy +1.2/tick inside), else a spot within
+  2 of the campfire (+0.8/tick).
+- **Death** (`systems/death.ts`): at health 0 the citizen dies of starvation
+  (satiety 0) or exhaustion. They stay in `citizens` with `alive = false`,
+  `diedTick`, `deathCause`; task/path cleared (releasing node, site and
+  worker reservations); carried goods perish into `ledger.foodLost/woodLost`;
+  home slot released and refilled; a `died` event records cause and day.
+- **Conservation with construction:** wood = map + carried + stockpile +
+  wood held by structures + woodLost − regrown is constant (tested every
+  tick); food additionally counts foodLost.
 
 ### 3.10 Social: relationships & memory
 
@@ -467,8 +510,18 @@ UI-only state (selected citizen, open panels) lives in React, not in the sim.
   destroys the app as soon as it is ready. `AppLifecycle.live` counts
   undestroyed apps for leak tests.
 - Procedural shapes (Graphics) only in MVP — no asset pipeline.
-- Citizens: coloured by role, positions interpolated between tiles; small icon
-  for current task; night tint over the scene from day phase.
+- Citizens: coloured by role, positions interpolated between tiles; cargo
+  badge; dimmed asleep, hidden while asleep inside their own shelter.
+- Shelters by stage: staked outline with delivered logs → rising walls →
+  house with roof, door and window.
+- **Day/night** (`render/daylight.ts`): darkness from the clock (bright
+  07:00–19:00, darkening to full night by 22:00, brightening 05:00–07:00).
+  Implemented as **tints** on the map, resource and structure layers (and a
+  lighter tint on citizens) — a colour multiply with zero extra fill — plus a
+  small additive `lights` layer (campfire glow, lit shelter windows) whose
+  opacity rises at night. No full-screen overlay. Measured frame time is
+  unchanged from M4.
+- PixiJS is code-split: `MapView` dynamic-imports the renderer.
 - Click → tile → topmost citizen → `onSelectCitizen(id)` callback to React.
 - Renderer owns Pixi objects keyed by entity id and reconciles each frame
   (create/update/destroy), never stores sim data of its own.

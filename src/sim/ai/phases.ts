@@ -3,10 +3,12 @@
 //   deliver       → 'deposit'  hand everything to the stockpile
 //   eat           → 'eat'      one unit per EAT_TICKS
 //   rest          → 'sleep'    until REST_STOP_ENERGY
+//   build         → 'fetch' (at camp) | 'supply' (carrying wood) | 'construct'
 //   wander        → 'linger'   WANDER_PAUSE_MIN..MAX ticks
 
 import { EAT_TICKS, GATHER_TICKS, WANDER_PAUSE_MAX, WANDER_PAUSE_MIN } from '../constants.ts'
 import { nextInt } from '../rng.ts'
+import { getCampfire } from '../structures.ts'
 import type { Citizen, WorldState } from '../types.ts'
 
 export function enterArrivalPhase(state: WorldState, c: Citizen): void {
@@ -32,6 +34,12 @@ export function enterArrivalPhase(state: WorldState, c: Citizen): void {
     case 'rest':
       task.phase = 'sleep'
       task.ticksLeft = 0
+      break
+    case 'build':
+      task.ticksLeft = 0
+      if (task.targetTile === getCampfire(state)?.tile && c.carrying?.kind !== 'wood') task.phase = 'fetch'
+      else if (c.carrying?.kind === 'wood') task.phase = 'supply'
+      else task.phase = 'construct'
       break
     default:
       task.phase = 'linger'

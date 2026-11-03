@@ -30,7 +30,7 @@ describe('createWorld', () => {
 
   it('places a single complete campfire on reachable grass', () => {
     expect(state.structures).toHaveLength(1)
-    expect(camp.complete).toBe(true)
+    expect(camp.stage).toBe('complete')
     expect(state.map.terrain[camp.tile]).toBe('grass')
     expect(state.map.resources[camp.tile]).toBeNull()
   })

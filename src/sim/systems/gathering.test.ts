@@ -22,9 +22,10 @@ function totals(s: WorldState) {
     if (c.carrying?.kind === 'berries') carriedFood += c.carrying.amount
     else if (c.carrying?.kind === 'wood') carriedWood += c.carrying.amount
   }
+  const siteWood = s.structures.reduce((n, st) => n + st.woodDelivered, 0)
   return {
-    food: mapFood + carriedFood + s.stockpile.food + s.ledger.foodEaten - s.ledger.foodRegrown,
-    wood: mapWood + carriedWood + s.stockpile.wood - s.ledger.woodRegrown,
+    food: mapFood + carriedFood + s.stockpile.food + s.ledger.foodEaten + s.ledger.foodLost - s.ledger.foodRegrown,
+    wood: mapWood + carriedWood + s.stockpile.wood + siteWood + s.ledger.woodLost - s.ledger.woodRegrown,
   }
 }
 

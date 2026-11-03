@@ -26,7 +26,9 @@ Full design: `docs/ARCHITECTURE.md` — read it before structural changes and ke
 10. **Event text is formatted in the UI**; sim events are structured data.
 11. **Bump `map.version`** whenever terrain, resources or `discovered` change — the renderer only re-bakes the map when it does.
 12. **Other layers import the sim only via `src/sim/index.ts`.** `render/` never imports React. One rAF loop (the `SimulationController`) drives simulation and rendering.
-13. **Resources are conserved.** Move whole units only and record gathering, regrowth and eating in `state.ledger`; the conservation test checks every tick. Citizens act only on discovered, reachable tiles.
+13. **Resources are conserved.** Move whole units only and record gathering, regrowth, eating and losses in `state.ledger`; wood held by structures counts too. The conservation test checks every tick. Citizens act only on discovered, reachable tiles.
+14. **Shelters are solid.** Path and step checks use `structures.walkableFor`; site selection must never cut off tiles reachable from the campfire.
+15. **Rendering: no full-screen overlays.** Use container tints, baked layers and small sprites; measure frame time in the browser after visual changes.
 
 ## Working style
 

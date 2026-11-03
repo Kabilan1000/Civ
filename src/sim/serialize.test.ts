@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { SCHEMA_VERSION } from './constants.ts'
 import { deserialize, SaveError, serialize } from './serialize.ts'
@@ -34,15 +36,37 @@ describe('serialize / deserialize', () => {
   it('migrates a v1 save (no ledger) to the current schema and keeps running', () => {
     const s = createWorld({ seed: 'migrate' })
     stepN(s, 200)
+    // Rebuild the exact v1 shape: no ledger, structures with `complete`, no deathCause.
     const v1 = JSON.parse(serialize(s))
     delete v1.ledger
     v1.schemaVersion = 1
+    v1.structures = v1.structures.map((st: any) => {
+      const { stage, woodRequired: _w, lastWorkTick: _l, ...rest } = st
+      return { ...rest, complete: stage === 'complete' }
+    })
+    v1.citizens = v1.citizens.map(({ deathCause: _d, ...c }: any) => c)
     const loaded = deserialize(JSON.stringify(v1))
     expect(loaded.schemaVersion).toBe(SCHEMA_VERSION)
-    expect(loaded.ledger).toEqual({ foodGathered: 0, woodGathered: 0, foodRegrown: 0, woodRegrown: 0, foodEaten: 0 })
+    expect(loaded.ledger).toEqual({ foodGathered: 0, woodGathered: 0, foodRegrown: 0, woodRegrown: 0, foodEaten: 0, foodLost: 0, woodLost: 0 })
     expect(loaded.citizens).toEqual(s.citizens)
+    expect(loaded.structures[0]).toMatchObject({ kind: 'campfire', stage: 'complete' })
     stepN(loaded, 200)
     expect(loaded.tick).toBe(400)
+  })
+
+  it('migrates a real v2 save written by the M4 code and keeps running deterministically', () => {
+    const raw = readFileSync(join(import.meta.dirname, '__tests__/fixtures/m4-save-v2.json'), 'utf8')
+    expect(JSON.parse(raw).schemaVersion).toBe(2)
+    const a = deserialize(raw)
+    expect(a.schemaVersion).toBe(SCHEMA_VERSION)
+    expect(a.structures[0]).toMatchObject({ kind: 'campfire', stage: 'complete', woodRequired: 0 })
+    expect(a.citizens.every((c) => c.deathCause === null)).toBe(true)
+    expect(a.ledger).toMatchObject({ foodLost: 0, woodLost: 0 })
+    const b = deserialize(raw)
+    stepN(a, 1500)
+    stepN(b, 1500)
+    expect(serialize(a)).toBe(serialize(b))
+    expect(a.structures.some((s) => s.kind === 'shelter')).toBe(true) // the old village starts building
   })
 
   it('rejects a current-version save that is missing the ledger', () => {
@@ -79,6 +103,12 @@ describe('serialize / deserialize', () => {
     ['duplicate id', (r: any) => (r.citizens[1].id = r.citizens[0].id), /citizens\[1\]\.id/],
     ['id beyond nextId', (r: any) => (r.nextId = 2), /id/],
     ['structure', (r: any) => delete r.structures[0].kind, /structures\[0\]\.kind/],
+    ['structure stage', (r: any) => (r.structures[0].stage = 'ruined'), /structures\[0\]\.stage/],
+    ['over-capacity shelter', (r: any) => (r.structures[0].residentIds = r.citizens.slice(0, 4).map((c: any) => c.id)), /residentIds/],
+    ['dead citizen with a task', (r: any) => Object.assign(r.citizens[0], {
+      alive: false, diedTick: 0, deathCause: 'starvation',
+      task: { kind: 'wander', phase: 'linger', targetTile: 0, targetId: null, ticksLeft: 1, startedTick: 0 },
+    }), /dead citizens/],
     ['stockpile', (r: any) => (r.stockpile.food = -5), /stockpile\.food/],
     ['ledger', (r: any) => (r.ledger.foodEaten = -1), /ledger\.foodEaten/],
     ['task kind', (r: any) => (r.citizens[0].task = { kind: 'dance', phase: 'x', targetTile: null, targetId: null, ticksLeft: 0, startedTick: 0 }), /citizens\[0\]\.task\.kind/],

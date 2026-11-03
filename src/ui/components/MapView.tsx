@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import type { SimulationController } from '../../app/SimulationController.ts'
-import { WorldRenderer } from '../../render/WorldRenderer.ts'
+import type { WorldRenderer } from '../../render/WorldRenderer.ts'
 
 export function MapView({ controller, aspect }: { controller: SimulationController; aspect: string }) {
   const ref = useRef<HTMLDivElement>(null)
@@ -8,17 +8,24 @@ export function MapView({ controller, aspect }: { controller: SimulationControll
   useEffect(() => {
     const host = ref.current
     if (!host) return
-    const renderer = new WorldRenderer(host)
-    renderer
-      .init()
-      .then((ready) => {
+    // PixiJS is code-split: the renderer module loads on first mount.
+    const mount: { renderer: WorldRenderer | null; unmounted: boolean } = { renderer: null, unmounted: false }
+    import('../../render/WorldRenderer.ts')
+      .then(async ({ WorldRenderer }) => {
+        if (mount.unmounted) return
+        const r = new WorldRenderer(host)
+        mount.renderer = r
+        const ready = await r.init()
         // A StrictMode/unmount cleanup may have destroyed it while initialising.
-        if (ready && !renderer.isDestroyed) controller.setRenderer(renderer)
+        if (ready && !r.isDestroyed) controller.setRenderer(r)
       })
       .catch((err: unknown) => console.error('Renderer failed to initialise', err))
     return () => {
-      controller.detachRenderer(renderer)
-      renderer.destroy()
+      mount.unmounted = true
+      if (mount.renderer) {
+        controller.detachRenderer(mount.renderer)
+        mount.renderer.destroy()
+      }
     }
   }, [controller])
 

@@ -55,6 +55,9 @@ export interface SimulationSnapshot {
   speed: Speed
   food: number
   wood: number
+  population: number
+  housed: number
+  shelters: number
 }
 
 export class SimulationController {
@@ -191,6 +194,9 @@ export class SimulationController {
       speed: this.speed,
       food: this.world.stockpile.food,
       wood: this.world.stockpile.wood,
+      population: this.world.citizens.filter((c) => c.alive).length,
+      housed: this.world.citizens.filter((c) => c.alive && c.homeId !== null).length,
+      shelters: this.world.structures.filter((s) => s.kind === 'shelter' && s.stage === 'complete').length,
     }
   }
 

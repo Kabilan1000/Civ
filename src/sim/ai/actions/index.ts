@@ -1,5 +1,6 @@
 import type { ActionKind } from '../../types.ts'
 import type { DecisionContext } from '../context.ts'
+import { scoreBuild, startBuild } from './build.ts'
 import { scoreDeliver, startDeliver } from './deliver.ts'
 import { scoreEat, startEat } from './eat.ts'
 import { scoreChop, scoreForage, startChop, startForage } from './gather.ts'
@@ -20,5 +21,6 @@ export const ACTIONS: readonly ActionDef[] = [
   { kind: 'deliver', score: scoreDeliver, start: startDeliver },
   { kind: 'forage', score: scoreForage, start: startForage },
   { kind: 'chop', score: scoreChop, start: startChop },
+  { kind: 'build', score: scoreBuild, start: startBuild },
   { kind: 'wander', score: scoreWander, start: startWander },
 ]

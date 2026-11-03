@@ -5,7 +5,7 @@ import { MapView } from './components/MapView.tsx'
 
 export default function App() {
   const { controller, snapshot } = useSimulation()
-  const { width, height, citizenCount } = controller.state.config
+  const { width, height } = controller.state.config
 
   return (
     <div className="app">
@@ -20,7 +20,9 @@ export default function App() {
         <aside className="sidebar">
           <Panel title="Civilization">
             <span data-testid="stockpile">
-              {citizenCount} citizens · Food {snapshot.food} · Wood {snapshot.wood}
+              Population {snapshot.population} · Housed {snapshot.housed} · Shelters {snapshot.shelters}
+              <br />
+              Food {snapshot.food} · Wood {snapshot.wood}
             </span>
             <br />
             Full dashboard arrives in M7.
