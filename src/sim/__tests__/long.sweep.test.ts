@@ -65,7 +65,8 @@ function runSeed(seed: string, days: number): Report {
   const idleSince = new Map<number, number>()
   let longestTask = { kind: '-', ticks: 0 }
   let idleStreak = 0
-  const prevPos = s.citizens.map((c) => ({ ...c.pos }))
+  // Keyed by id: the population changes (births, archiving) since Population V1.
+  const prevPos = new Map(s.citizens.map((c) => [c.id, { ...c.pos }]))
   let simMs = 0
 
   for (let t = 0; t < days * TICKS_PER_DAY; t++) {
@@ -78,13 +79,13 @@ function runSeed(seed: string, days: number): Report {
     expect(s.stockpile.food >= 0 && s.stockpile.wood >= 0).toBe(true)
     expect(s.events.length).toBeLessThanOrEqual(MAX_EVENTS)
     expect(plantViolations(s, PLANT_SENESCENCE_ENABLED)).toEqual([])
-    for (const [i, c] of s.citizens.entries()) {
+    for (const c of s.citizens) {
       const tile = toIndex(c.pos.x, c.pos.y, s.map.width)
       expect(isPassable(s.map, tile)).toBe(true)
       expect(s.map.discovered[tile]).toBe(1)
-      const p = prevPos[i]!
+      const p = prevPos.get(c.id) ?? c.pos // a newborn appears where its parent stands
       if (p.x !== c.pos.x || p.y !== c.pos.y) expect(isAdjacent4(p, c.pos)).toBe(true)
-      prevPos[i] = { ...c.pos }
+      prevPos.set(c.id, { ...c.pos })
       expect(c.memories.length).toBeLessThanOrEqual(MAX_MEMORIES)
       for (const v of Object.values(c.needs)) expect(v >= 0 && v <= 100).toBe(true)
       if (c.carrying) expect(c.carrying.amount > 0 && c.carrying.amount <= CARRY_CAPACITY[c.carrying.kind]).toBe(true)

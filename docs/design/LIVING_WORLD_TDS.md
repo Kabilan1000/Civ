@@ -731,7 +731,7 @@ HistorySample += { children?, adults?, elders?, births?, deaths? }   // optional
   - Stage thresholds: `ADULT_AGE` = 14, `ELDER_AGE` = 50.
   - `MAX_AGE` = 65.
   - Old-age hazard on each birthday from 50: `floor(1000·k²/256)‰`, where
-    k = age − 49. That is 4‰ at 50, 141‰ at 55, 473‰ at 60 and certain at 65.
+    k = age − 49. That is 3‰ at 50, 140‰ at 55, 472‰ at 60 and certain at 65.
 - **Partnership (daily):**
   - Both adults, alive, unpartnered and not kin (parent, child or sibling).
   - Mutual affinity ≥ 30 and familiarity ≥ 30, where `PARTNER_AFFINITY` is
@@ -789,6 +789,90 @@ HistorySample += { children?, adults?, elders?, births?, deaths? }   // optional
   - Old age always ends a life by 65.
   - Nothing reads colony distress in order to *add* people: no rescue
     births.
+
+### 8.3a As implemented: refinements
+
+- **Headroom needs a couple.** Building ahead while nobody could yet have
+  children cost builders energy in week 1 (the needs balance test dropped
+  to a minimum of 19.9 against its floor of 20). Headroom now requires
+  prosperity *and* at least one couple.
+- **Outer site ring.** The M5 site ring (3–6 tiles, walk ≤ 12) holds only
+  about 10 shelters, which capped housing at about 30 beds: a day-1,050
+  village had a deficit of 18 and no site. Site choice now falls back to an
+  outer ring (≤ 10, walk ≤ 20) once the inner ring is full. A 23×23 test
+  fits 20+ shelters with every route kept open.
+- **Rules switch.** `SimRules.population` (default on) lets the behaviour
+  parity tests run with the population rules off, still matching the
+  pre-M10b simulation exactly.
+- **Archive and memories.** A memory may name an archived person, so its
+  subject is validated as an id rather than as a listed citizen.
+  Relationships about archived people are dropped.
+
+### 8.3b Results (Population V1 as shipped)
+
+**Population sweep: 12 seeds × 50 world years** (`npm run sweep:population`),
+with hard gates checked every tick. Every gate held on every seed:
+
+- conservation;
+- bounds;
+- no teleporting;
+- age, needs and child-task limits;
+- mutual partners;
+- residents ≤ 5;
+- archive ≤ 400;
+- exact save/resume at year 50.
+
+| Milestone | Day range | At nominal 100× (500 ticks/s) |
+|---|---|---|
+| first partnership | 6–12 | ≈ 3–6 s |
+| first birth | 9–25 | ≈ 4–12 s |
+| first coming of age | 681–697 | ≈ 5.4–5.6 min |
+| first old-age death | 789–1,154 | ≈ 6.3–9.2 min |
+| founding generation gone | 1,672–1,977 | ≈ 13.4–15.8 min |
+
+In the production build, headless with software rendering, 100× measured
+419 ticks/s with 12–14 villagers and 362 with 41: frames hold at about
+20 fps and hit the 20-ticks-per-frame cap. Real-time figures are therefore
+about 20–40% longer; for example, the first birth became visible after
+13.6 s.
+
+**Trajectories:**
+
+- A food-limited plateau of 23–32 villagers for about 15 years. Children
+  eat but don't gather, so stockpile food settles near the birth threshold.
+- When the first children come of age, the workforce grows and births
+  resume. By year 20 the seeds differ widely (31–50), and by year 25 they
+  are at 41–60.
+- **Every seed reaches the 60-citizen cap by about year 35–40 and stays
+  there.** By year 50 each seed has had 60 births and 12 deaths (all
+  founders, of old age), and up to 3 generations.
+
+**100-year runs (4 seeds):**
+
+- 120 births and 72 deaths each, all of old age, with 0 needs deaths.
+- 5 generations.
+- Dips as cohorts age out, for example 60 → 53 → 60 around years 80–95.
+- Saves at most 483 KB, the archive at 71–72, and at most 53 relationship
+  records per citizen: all flat between year 50 and year 100. Memory and
+  saves are bounded.
+
+**Balance finding (for review, not tuned in V1):** under the default
+balance, food and housing limit growth only in the first 15–20 years.
+After that, the **population cap is the binding constraint**, so
+long-run populations are nearly the same on every seed, and decline
+happens only as mild dips when cohorts age out. More varied long-run
+outcomes need a scarcity source that scales with population. Seasonal
+food (M11) and the living ecology (M10c, re-enabling senescence) are the
+planned ones. Lowering food per bush or raising child food needs would
+also work, but would change v0.1 balance.
+
+**Other figures:**
+
+- Standard sweep with population on (30 × 30 days, 3 × 100 days): 0
+  deaths, worst satiety 26.4, all housed by a median of day 2. 100-day
+  villages reach 18–20, and save/resume is exact.
+- Performance: `step` takes 0.10, 0.24 and 0.50 ms at 12, 30 and 60
+  citizens (budgets 0.3, 0.8 and 1.6).
 
 ### 8.4 Deadlock freedom
 

@@ -46,6 +46,7 @@ Then open http://localhost:5173.
 | `npm test`           | Run the test suite once                                         |
 | `npm run test:watch` | Run tests in watch mode                                         |
 | `npm run sweep`      | Long-run balance sweep (30 seeds × 30 days + 3 × 100 days, ~6 min) |
+| `npm run sweep:population` | Population sweep: 12 seeds × 50 world years (long; shard with `LW_POP_SHARD`/`LW_POP_SHARDS`) |
 | `npm run typecheck`  | Type-check only                                                 |
 | `npm run lint`       | Lint with oxlint                                                |
 
@@ -74,8 +75,32 @@ The village runs by itself. Things you can do:
 What to expect in a typical world: shelters go up on day 1–2 and everyone is
 housed by about day 2–3; explorers open up most of the island within a few
 days; friendships form over the first weeks; arguments are common, lasting
-rivalries rare. Citizens die only if their health reaches zero — from
-starvation or exhaustion — which is rare with the current balance.
+rivalries rare.
+
+## Generations
+
+The village is no longer fixed at twelve. Ages are counted in world years
+(48 days):
+
+- **Founders** are adults aged 18–36.
+- **Partners:** adults who like and know each other well become partners.
+- **Children:** a couple with a home, while the village has food to spare
+  (3 per person in the stockpile), may have a child — at most one a year
+  each, and never beyond 60 villagers. A full home is no obstacle: the
+  child squeezes in, and the builders plan another shelter.
+- **Childhood:** children eat (less than adults), sleep at home, play near
+  the campfire and chat. They come of age at **14** and take up work.
+- **Old age:** from **50**, each birthday may be a citizen's last; nobody
+  lives past **65**. Starvation and exhaustion still kill too, but rarely.
+- **The archive:** a year after death a citizen is archived; their name lives
+  on in their family's records.
+
+At **100×** the first child arrives within about a minute, children grow up in
+about 6 minutes, old age begins to take the founders after 7–9 minutes, and
+the founding generation is gone in roughly 20 minutes. Villages differ: food
+and space set how far each one grows. The dashboard counts children, adults,
+elders, couples, births and deaths; the inspector shows each citizen's age and
+family; the History panel charts children, elders, births and deaths.
 
 **The calendar.** The clock shows the season, day and year — for example
 “Spring 3, Year 1 · 14:42” — with the world's absolute day beside it (and in
@@ -149,8 +174,8 @@ housing, food/wood, exploration, social and performance figures.
 
 ## Known limitations
 
-- Twelve citizens and a 36 × 24 map are fixed; there are no births, ageing,
-  trade or player commands (by design for the MVP).
+- The 36 × 24 map is fixed and the village holds at most 60 people; there
+  are no trade, player commands, genetics or illness.
 - Saves are per-browser (localStorage); there is no cloud sync or file
   export.
 - The event feed keeps only the last 200 events; history keeps the last 60

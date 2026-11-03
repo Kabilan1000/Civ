@@ -131,10 +131,34 @@ Each tick runs systems in a fixed order:
 8. **stats** — sample civilization metrics (every 24 ticks) for the dashboard.
 
 Implemented so far (social and exploration run inside decide/act):
-`time → needs (incl. health, death) → ecology → construction → decide →
-act → history` (`systems/time.ts`, `needs.ts`, `death.ts`,
+`time → needs (incl. health, death) → ecology → life cycle (dawn) →
+construction → decide → act → history` (`systems/time.ts`, `needs.ts`, `death.ts`,
 `ecology.ts` (M10b, replaced `resources.ts`), `construction.ts`, `decide.ts`, `tasks.ts`). The other systems slot into the
 positions above as their milestones land.
+
+### 3.4b Population (Population V1, `systems/lifecycle.ts`, `citizens/life.ts`)
+
+- Ages in world years (48 days) from `Citizen.bornTick` (a dawn tick):
+  child < 14 ≤ adult < 50 ≤ elder; old-age hazard on each birthday from 50
+  (`floor(1000·k²/256)‰`, k = age − 49), certain at 65. Founders 18–36 from
+  a creation-only `seed#founders` stream.
+- Dawn pass, ascending ids: birthdays → partnerships (mutual affinity and
+  familiarity ≥ 30, not kin) → births (fertile 16–42, a home below 3 + 2
+  residents, food ≥ 3 × living, < 60 living, a year since each parent's
+  last child, 40‰) → `assignHomes` → archive (dead > 48 days ago; ≤ 400).
+  All randomness from `state.population.rng`.
+- Children only eat, rest, socialize and wander (within 4 of the campfire);
+  their satiety decays at 0.6×. The jitter for every action is still drawn,
+  so RNG draw counts never depend on life stage. Elders don't explore.
+- Housing (`structures.housingDeficit`): living + couples apart + headroom
+  (3 beds while a couple exists, food ≥ 5 × living and below the cap) −
+  beds. A birth may overcrowd a home (≤ 5 residents), which raises demand,
+  so births never wait for a spare bed. `assignHomes` reunites couples,
+  houses children with a parent, moves lodgers out of overcrowded homes,
+  then fills free beds. Sites: inner ring (≤ 6, walk ≤ 12) first, then an
+  outer ring (≤ 10, walk ≤ 20) once the inner one is full.
+- `SimRules.population` (default on) exists so tests can prove that,
+  without the population rules, behaviour still matches v0.1 exactly.
 
 ### 3.5 Map
 
@@ -905,9 +929,10 @@ Each milestone is merged only when its "done when" holds and `npm test`,
 | **M7** | **UI** — dashboard, citizen inspector (incl. decision scores), event feed, click-to-select. | All panels live-update at ≤ 5 Hz without frame drops at 10x. |
 | **M8** | **Persistence & restart** — save slots, autosave, load, restart with seed, migrations scaffold, error handling. | Save → reload page → load resumes identical world; corrupt save handled. |
 | **M9** | **Balance & polish** — long-run sweep (`npm run sweep`), evidence-based tuning, construction loop fix, adaptive render resolution, keyboard shortcuts, accessibility, README. | Sweep invariants hold over 30 seeds × 30 days and 3 × 100 days; perf tests pass; browser soak at 10x has no errors. |
+| **Pop V1** | **Population V1** — ages and life stages, founders' ages, partnerships, births, children, coming of age, old-age death, household housing with growth, 60-citizen cap, archive, family UI (schema v7; `design/LIVING_WORLD_TDS.md` §8). | Births, adulthood and old age verified in controlled tests and a 12-seed × 50-year sweep; conservation every tick; save/resume exact across births and deaths. |
 | **M10a** | **World calendar** — pure season/year functions, clock, feed separators, chart season lines (all UI-derived); 100x speed. | `serialize()` byte-identical to pre-M10a golden hashes for 5 seeds × 5 checkpoints; calendar boundary tests. |
 
-All milestones M0–M9 are complete (the MVP). M10a (Living World, calendar only) is complete; M10b–M10d are specified in `design/LIVING_WORLD_TDS.md`.
+All milestones M0–M9 are complete (the MVP). After it: M10a (calendar, 100×), the M10b checkpoint (plant lifecycles, senescence gated off) and Population V1 are complete; M10c–M10d resume next (`design/LIVING_WORLD_TDS.md`).
 
 ### Out of scope for the MVP
 
