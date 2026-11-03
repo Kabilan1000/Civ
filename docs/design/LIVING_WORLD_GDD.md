@@ -442,7 +442,48 @@ gates.
 
 ---
 
-## 4. Future population systems (M12–M13; design only)
+## 4. Population V1 [approved priority — next milestone]
+
+> **Priority change (after M10a).** Population growth moves ahead of the
+> living ecology, functional seasons and the other expansions. M10b is kept
+> as a committed checkpoint: schema v6, with plant senescence gated off, so
+> it behaves exactly like v0.1. Population V1 builds on it as schema **v7**.
+> M10c and M10d resume after Population V1. The design that was deferred to
+> a population review (§2.3) is decided here; the technical specification is
+> TDS §8.
+
+### 4.0 Population V1 in one paragraph
+
+The 12 founders are adults with deterministic ages. Adults who like each
+other form partnerships. A partnered household with a home and enough food
+in the village has children now and then, always by explicit rules and
+never as a rescue. Children are real citizens: they have names, parents,
+ages and needs, they eat from the stockpile (counted in the ledger), and
+they stay near camp with a small set of safe behaviours. At 14 they come of
+age and join the workforce. At 50 they become elders, and from then on a
+birthday may be their last; nobody lives past 65. Housing expands ahead of
+need and when overcrowded, so births never deadlock. The population is
+capped at 60. The dead are compacted into an archive after a year.
+
+### 4.0a Timescales (decided)
+
+Ages are in **world years** (48 days):
+
+| Stage | Age | Notes |
+|---|---|---|
+| Child | 0–13 | Eats, sleeps, plays and chats near camp; no work. |
+| Adult | 14–49 | Full roles. Can partner at 14; fertile 16–42. |
+| Elder | 50+ | Works but does not explore. From 50, each birthday rolls an old-age hazard that rises to certainty at 65. |
+
+The founders are 18–36. At 100× (about 2 days per second at full speed):
+
+- the first child comes of age after about 672 days (about 6 minutes);
+- the first old-age deaths come after about 7–9 minutes;
+- the founding generation is gone within about 20 minutes.
+
+Seeds differ: some villages grow, others stall or decline.
+
+## 4b. Later population systems (design notes; refined by §4.0)
 
 Timescales and terminology are deferred to the population review (§2.3).
 The structures and rules below don't depend on those numbers.
@@ -572,7 +613,22 @@ citizen before populations exceed about 30. The dead are archived. See TDS
 
 ---
 
-## 8. Production roadmap (M10–M14)
+## 8. Production roadmap
+
+**Revised after M10a (priority change):**
+
+| Milestone | Status |
+|---|---|
+| M10a — Calendar, 100× | done |
+| M10b — Plant life cycle | **checkpoint** (schema v6; senescence gated off; sprites and seedling site claim not done) |
+| **Population V1** | **next** (schema v7; TDS §8) |
+| M10c — Dispersal, habitat, recovery | after Population V1 (re-enables senescence together with reproduction) |
+| M10d — Ecology dashboard | after M10c |
+| M11+ | re-planned after Population V1 (seasons that matter, settlement wear, Hand phase) |
+
+The original M10–M14 plan follows for reference.
+
+### Original plan (M10–M14)
 
 Every milestone must pass the following before it is committed:
 

@@ -585,6 +585,30 @@ Consequences for the specification, corrected above:
   validates and keeps them, and no birth ever lands inside any clearing that
   existed at that tick.
 
+### 7.11a M10b as implemented (checkpoint)
+
+- **The senescence gate covers old age *and* death**, not death alone. The
+  approved wording, "plants reach old and stay there", would itself have run
+  the ecology down. Every bush would be old (cap 4, half fruiting) by about
+  day 35, and every tree old (no wood growth) by about day 112. With the
+  gate off, plants age but stay mature, which is v0.1 behaviour exactly.
+  This is verified by `golden.test.ts`, which matches 25 checkpoints against
+  id-independent behaviour hashes from the pre-M10b simulation.
+- **D1 byte parity is retired** as planned. Its role passes to behaviour
+  parity. D6 seed stability (tick-0 terrain and resources) still holds.
+- **H6 staggering is guaranteed, not just likely.** Purely random ages
+  clumped: on one seed, 12.5% of bushes would die on the same day. Initial
+  and migrated ages now redraw, deterministically and with bounded attempts,
+  any draw that would put more than 10% of a kind on one death day.
+- **Migration** was tested on a real v0.1 save (`fixtures/m9-save-v5.json`,
+  written by the pre-M10b code). Every plant is kept, including those inside
+  the clearing. Ages are staggered, ids are unchanged, and the world
+  continues with exact behaviour parity for 30 days.
+- **Not done** (superseded by the Population V1 priority change): stage
+  sprites in the renderer (no non-mature plant can occur while the gate is
+  off), and the seedling site claim, which only matters once germination
+  exists (M10c).
+
 ### 7.12 Note: 100× speed (added in M10a)
 
 At 100× (500 ticks/s) the M10 budget of 0.25 ms per tick costs about 12.5%
@@ -630,6 +654,191 @@ Approve each item, or mark it for change, before M10a starts:
     M10.
 
 ---
+
+## 8. Population V1 specification (schema v7)
+
+**Scope:**
+
+- ages and life stages;
+- deterministic founder ages;
+- partnerships;
+- births;
+- children as real citizens;
+- coming of age;
+- old-age death;
+- household-aware housing with expansion that cannot deadlock;
+- a population cap (60);
+- life events;
+- an archive of the dead;
+- population dashboard and charts.
+
+**Out of scope:** genetics beyond trait blending, pregnancy, education,
+religion, wildlife, disease, politics, multiple villages and ecology
+changes. Plant senescence stays off.
+
+### 8.1 Data model (v6 → v7)
+
+```ts
+Citizen += {
+  bornTick: number                       // may be negative (founders); age = floor((tick − bornTick) / TICKS_PER_YEAR)
+  parentIds: [number, number] | null     // null for founders
+  partnerId: number | null               // mutual; cleared when either dies
+  childIds: number[]                     // ascending
+  lastChildTick: number | null           // birth spacing per parent
+}
+DeathCause += 'oldAge'
+SimEventKind += 'born' | 'cameOfAge' | 'partnered'      // 'died' carries cause 'oldAge'
+MemoryKind += 'childBorn' | 'partnered'
+PersonRecord { id, name, role, bornTick, diedTick, cause, parentIds, partnerId, childIds }
+WorldState += {
+  archive: PersonRecord[]                // the long dead (≤ ARCHIVE_MAX, oldest dropped)
+  population: { rng: RngState; counters: { births, oldAgeDeaths, partnerships, comingOfAge, archived } }
+}
+HistorySample += { children?, adults?, elders?, births?, deaths? }   // optional: absent before v7
+```
+
+**Migration v6 → v7:**
+
+- Every citizen gets an adult `bornTick`, derived from a hash of seed and
+  id (ages 18–36, birthday spread over the year), with no RNG state.
+- `parentIds` is null, `partnerId` null, `childIds` [] and `lastChildTick`
+  null for every citizen.
+- `archive` starts as [], and `population.rng` is seeded with
+  `seed#population@tick`. The counters start at 0.
+- History samples are kept unchanged.
+
+### 8.2 Streams and order
+
+- **`population.rng` (own stream):** used for birth rolls, child names,
+  roles and personality variation, and old-age rolls.
+- **Founder ages** come from the creation-only `seed#founders` stream, so the
+  creation draws on `state.rng` are unchanged. The founders' names, roles,
+  positions and personalities are identical to v0.1.
+- **System order:**
+  `time → needs (death) → ecology → lifeCycle (dawn only) → construction → decide → act → history`.
+- The dawn `lifeCycle` pass runs in this order:
+  1. birthdays: coming of age, then the old-age roll;
+  2. partnerships;
+  3. births;
+  4. household assignment;
+  5. archiving.
+
+  Everything is iterated in ascending id.
+
+### 8.3 Rules (constants in `sim/constants.ts`)
+
+- **Ages:**
+  - Stage thresholds: `ADULT_AGE` = 14, `ELDER_AGE` = 50.
+  - `MAX_AGE` = 65.
+  - Old-age hazard on each birthday from 50: `floor(1000·k²/256)‰`, where
+    k = age − 49. That is 4‰ at 50, 141‰ at 55, 473‰ at 60 and certain at 65.
+- **Partnership (daily):**
+  - Both adults, alive, unpartnered and not kin (parent, child or sibling).
+  - Mutual affinity ≥ 30 and familiarity ≥ 30, where `PARTNER_AFFINITY` is
+    30. Friendship is 50, so this is deliberately reachable.
+  - Pairs are formed greedily by combined affinity (ties by ids). There is no
+    roll: partnering is a consequence of the relationship.
+- **Birth (daily, per couple):**
+  - both partners are alive and aged 16–42;
+  - at least one partner has a home whose residents are fewer than
+    `SHELTER_CAPACITY + MAX_OVERCROWD` (3 + 2);
+  - stockpile food ≥ `BIRTH_FOOD_PER_CAPITA` (3) × living;
+  - living < `MAX_POPULATION` (60);
+  - neither partner had a child in the last `BIRTH_SPACING_DAYS` (48);
+  - then a `BIRTH_CHANCE` roll of 40‰.
+
+  **No spare bed is needed.** A birth may overcrowd a home, and that creates
+  housing demand.
+- **Child:**
+  - Spawns on a housed parent's tile and lives in that parent's home.
+  - Name: an unused name from the pool, drawn from `population.rng`.
+  - Personality: the parents' average ± up to 0.1 per trait.
+  - Role: decided at birth by village demand (the least represented adult
+    role; explorers capped at 2) and used from adulthood.
+  - Needs as adults, but satiety decays at `CHILD_SATIETY_FACTOR` (0.6).
+  - Actions are limited to eat, rest, socialize and wander. Wander is
+    centred on the campfire with radius 4. Other actions score 0, and their
+    jitter is still drawn, so the RNG draw count stays fixed. Food a child
+    eats is counted in `ledger.foodEaten` like anyone else's.
+- **Coming of age (birthday 14):** a `cameOfAge` event, then an immediate
+  re-decision with the full action set. Elders don't explore.
+- **Natural death:**
+  - Applies `killCitizen(…, 'oldAge')`, which records witnesses, drops any
+    goods carried (to the ledger) and re-assigns homes.
+  - The partner becomes free to partner again.
+- **Housing:**
+  - `housingDeficit = living + apartCouples + headroom − capacity`.
+  - `headroom = HOUSING_HEADROOM` (3) while the village is **prosperous**:
+    stockpile food ≥ 5 × living and living < `MAX_POPULATION`.
+  - Assignment runs at dawn and on deaths and completions, in this order:
+    1. remove the dead;
+    2. reunite couples: one partner moves to the other's home if it has a
+       free bed, else both move to a shelter with 2 free beds;
+    3. children follow a housed parent (overcrowding allowed up to the
+       limit);
+    4. lodgers (adults with no child or partner in their home) move out of
+       overcrowded homes into free beds;
+    5. the homeless fill free beds, in id order.
+- **Archive:** one world year after death, a citizen moves to `archive`.
+  Other citizens' relationship records about them are dropped. The archive
+  holds at most `ARCHIVE_MAX` (400) people, oldest dropped first.
+- **Bounded growth:**
+  - The population is capped at 60, and site capacity around camp limits
+    housing.
+  - Births stop when food per capita, homes or ages don't allow them.
+  - Old age always ends a life by 65.
+  - Nothing reads colony distress in order to *add* people: no rescue
+    births.
+
+### 8.4 Deadlock freedom
+
+- Births need only a housed parent with an overcrowd margin, not a spare
+  bed.
+- Every birth raises `living`, so it raises `housingDeficit`.
+- Partners living apart raise the deficit until they share a home.
+- The planner builds whenever the deficit is above 0, there is a site and
+  wood allows.
+
+There is therefore no state in which births are blocked only because no home
+exists and none will be planned. Births can still stop for other reasons:
+food, ages, the cap, or no available sites.
+
+### 8.5 Validation and acceptance
+
+**Hard gates:**
+
+- determinism and save/resume across births, birthdays and deaths;
+- conservation every tick, including food eaten by children;
+- valid v1–v7 migrations;
+- seed stability (tick-0 map);
+- bounds: population ≤ 60, ages ≤ 65, residents ≤ 5 per shelter, archive
+  ≤ 400, bounded save size;
+- the controlled scenarios in §8.6;
+- performance at 12, 30 and 60 citizens (`step` ≤ 0.3, 0.8 and 1.6 ms).
+
+**Balance targets** (multi-seed report; growth and decline are both
+allowed):
+
+- the first birth by year 2 on most seeds;
+- founders replaced (any founder-descended living citizen) on most seeds by
+  year 50;
+- no seed extinct before year 20 under normal conditions;
+- a spread of population trajectories;
+- no starvation deaths under normal conditions.
+
+### 8.6 Controlled scenarios (tests)
+
+- A birth happens when all conditions hold and is blocked by each condition
+  alone.
+- A child eats (ledger), grows up at 14, takes a role and works.
+- An elder dies of old age by 65.
+- A couple reunites in one home.
+- A birth into a full home creates housing demand, and a new shelter
+  follows.
+- A lodger moves out.
+- Old age widows a partner, who can partner again.
+- Archiving prunes relationships and keeps saves bounded.
+- No citizen is left without a decision after a stage change.
 
 ## Change log
 
