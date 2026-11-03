@@ -198,6 +198,8 @@ export const MAX_SITE_WORKERS = 2
 /** Shelters are placed this far from the campfire (Manhattan, inclusive). */
 export const SITE_MIN_CAMP_DISTANCE = 3
 export const SITE_MAX_CAMP_DISTANCE = 6
+/** …and at most this many walking steps from it (a house across a ridge is a bad site). */
+export const SITE_MAX_WALK_STEPS = 12
 /** How often (ticks) the village considers planning a new shelter. */
 export const PLAN_INTERVAL = 10
 /** A site with no delivery or labour for this long is abandoned (wood refunded). */
@@ -218,7 +220,8 @@ export const SHARE_TICKS = 3
 /** At most this many berries are given per share. */
 export const SHARE_MAX_UNITS = 2
 /** A citizen counts as hungry enough to be offered food below this satiety. */
-export const SHARE_HUNGER_SATIETY = 45
+// M9: raised from 45 — sharing happened ~0.5×/village/month, too rare to matter.
+export const SHARE_HUNGER_SATIETY = 55
 /** A citizen won't start another interaction for this many ticks. */
 export const SOCIAL_COOLDOWN = 40
 /** The same pair won't interact again for this many ticks. */
@@ -238,8 +241,9 @@ export const SHARE_FAMILIARITY = 5
 export const CHAT_AFFINITY_BASE = 5
 export const CHAT_AFFINITY_CHARM = 6
 /** Affinity change: argument = −(ARGUE_AFFINITY_BASE + ARGUE_AFFINITY_TOUCHY × (1 − own resilience)). */
-export const ARGUE_AFFINITY_BASE = 8
-export const ARGUE_AFFINITY_TOUCHY = 6
+// M9: raised from 8/6 — at the old values a grudge never reached RIVALRY_AFFINITY in 30-day sweeps.
+export const ARGUE_AFFINITY_BASE = 12
+export const ARGUE_AFFINITY_TOUCHY = 8
 export const SHARE_AFFINITY_RECEIVER = 15
 export const SHARE_AFFINITY_GIVER = 5
 /** Argument probability: base + low-sociability + stress + bad-blood terms, capped. */
@@ -248,6 +252,9 @@ export const ARGUE_MAX = 0.6
 /** Relationship milestones that produce events (once per crossing). */
 export const FRIENDSHIP_AFFINITY = 50
 export const RIVALRY_AFFINITY = -40
+/** Grudges heal slowly: a chat raises affinity only GRUDGE_HEALING × as much while it is below GRUDGE_AFFINITY (M9). */
+export const GRUDGE_AFFINITY = -10
+export const GRUDGE_HEALING = 0.5
 /** Partners with affinity below this are avoided. */
 export const AVOID_AFFINITY = -50
 
@@ -293,6 +300,9 @@ export const SCORE_JITTER = 0.02
 export const DISTANCE_FALLOFF_STEPS = 40
 /** Village wants this much food per living citizen in the stockpile. */
 export const FOOD_RESERVE_PER_CITIZEN = 6
+/** Beyond this many reserves' worth, foraging demand drops to FORAGE_SURPLUS_DEMAND (M9: stockpiles grew without limit). */
+export const FOOD_SURPLUS_RESERVES = 3
+export const FORAGE_SURPLUS_DEMAND = 0.05
 /** Spare wood the village keeps in reserve; housing wood is added on top (structures.housingWoodNeed). */
 export const WOOD_TARGET = 20
 /** Scores at night are multiplied by this for outdoor work. */

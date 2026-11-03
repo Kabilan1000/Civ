@@ -11,6 +11,7 @@ import { MapView } from './components/MapView.tsx'
 import { ConfirmDialog, type ConfirmRequest } from './components/Modal.tsx'
 import { SaveDialog } from './components/SaveDialog.tsx'
 import { selectedIn, type Selection } from './selection.ts'
+import { shortcutFor } from './shortcuts.ts'
 
 interface Toast {
   id: number
@@ -62,6 +63,33 @@ export default function App() {
     }
   }, [autosaver, controller, notify])
 
+  // Keyboard shortcuts (see ui/shortcuts.ts). Escape inside a dialog is handled by the dialog.
+  const dialogOpen = saves !== null || confirmRequest !== null
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null
+      const action = shortcutFor({
+        key: e.key,
+        ctrlKey: e.ctrlKey,
+        metaKey: e.metaKey,
+        altKey: e.altKey,
+        targetTag: target?.tagName,
+        targetEditable: target?.isContentEditable,
+        targetRole: target?.getAttribute?.('role') ?? null,
+        dialogOpen,
+      })
+      if (!action) return
+      e.preventDefault()
+      if (action === 'togglePause') controller.togglePause()
+      else if (action === 'speed1') controller.setSpeed(1)
+      else if (action === 'speed3') controller.setSpeed(3)
+      else if (action === 'speed10') controller.setSpeed(10)
+      else if (action === 'deselect') setSelection(null)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [controller, dialogOpen])
+
   // Dev-only handle for automated browser checks (stripped from production builds).
   useEffect(() => {
     if (import.meta.env.DEV) {
@@ -80,8 +108,8 @@ export default function App() {
         <div className="world-col">
           <MapView controller={controller} aspect={`${width} / ${height}`} selectedId={selectedId} onSelect={select} />
           <div className="below-map">
-            <EventFeed controller={controller} snapshot={snapshot} onSelect={select} />
-            <HistoryCharts controller={controller} snapshot={snapshot} />
+            <EventFeed controller={controller} lastEventId={snapshot.lastEventId} worldId={snapshot.worldId} onSelect={select} />
+            <HistoryCharts controller={controller} historyLength={snapshot.historyLength} worldId={snapshot.worldId} />
           </div>
         </div>
         <aside className="sidebar">
@@ -89,6 +117,13 @@ export default function App() {
           <Inspector controller={controller} snapshot={snapshot} selectedId={selectedId} onSelect={select} />
         </aside>
       </main>
+
+      <footer className="footer" aria-label="Keyboard shortcuts">
+        <span><kbd>Space</kbd> play / pause</span>
+        <span><kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> speed 1× / 3× / 10×</span>
+        <span><kbd>Esc</kbd> close dialog or deselect</span>
+        <span className="muted">Click a citizen to inspect them</span>
+      </footer>
 
       {saves && (
         <SaveDialog

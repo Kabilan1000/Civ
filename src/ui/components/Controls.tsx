@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { SimulationController, SimulationSnapshot } from '../../app/SimulationController.ts'
 import { SPEEDS } from '../../sim/index.ts'
+import { DAY_BOUNDARY_HINT } from '../format/text.ts'
 import type { ConfirmRequest } from './Modal.tsx'
 
 const pad = (n: number) => String(n).padStart(2, '0')
@@ -68,15 +69,28 @@ function SeedRestart({ controller, unsaved, initialSeed, confirm, notify }: { co
 export function Controls({ controller, snapshot, onOpenSaves, confirm, notify }: Props) {
   return (
     <div className="controls" aria-label="Simulation controls">
-      <span className="clock" aria-live="off" data-testid="clock">
-        Day {snapshot.day} · {pad(snapshot.hour)}:{pad(snapshot.minute)} · {PHASE_LABEL[snapshot.phase]}
+      <span className="clock" aria-live="off" data-testid="clock" title={DAY_BOUNDARY_HINT}>
+        Day {snapshot.day} · {pad(snapshot.hour)}:{pad(snapshot.minute)} · {snapshot.hour < 6 ? 'Late night' : PHASE_LABEL[snapshot.phase]}
       </span>
-      <button className="primary" onClick={() => controller.togglePause()} aria-pressed={snapshot.paused}>
+      <button
+        className="primary"
+        onClick={() => controller.togglePause()}
+        aria-pressed={snapshot.paused}
+        aria-keyshortcuts="Space"
+        title={snapshot.paused ? 'Resume the simulation (Space)' : 'Pause the simulation (Space)'}
+      >
         {snapshot.paused ? 'Play' : 'Pause'}
       </button>
-      <div className="segmented" role="group" aria-label="Speed">
-        {SPEEDS.map((s) => (
-          <button key={s} onClick={() => controller.setSpeed(s)} aria-pressed={snapshot.speed === s}>
+      <div className="segmented" role="group" aria-label="Simulation speed">
+        {SPEEDS.map((s, i) => (
+          <button
+            key={s}
+            onClick={() => controller.setSpeed(s)}
+            aria-pressed={snapshot.speed === s}
+            aria-keyshortcuts={String(i + 1)}
+            title={`${s}× speed (${i + 1})`}
+            aria-label={`${s} times speed`}
+          >
             {s}x
           </button>
         ))}

@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react'
-import type { SimulationController, SimulationSnapshot } from '../../app/SimulationController.ts'
+import { memo, useMemo, useState } from 'react'
+import type { SimulationController } from '../../app/SimulationController.ts'
 import { HISTORY_INTERVAL, HISTORY_MAX, getHistory } from '../../sim/index.ts'
 import { formatTick } from '../format/text.ts'
 import { LineChart } from './LineChart.tsx'
@@ -10,12 +10,18 @@ const S2 = 'var(--series-2)'
 const S3 = 'var(--series-3)'
 const S4 = 'var(--series-4)'
 
-export function HistoryCharts({ controller, snapshot }: { controller: SimulationController; snapshot: SimulationSnapshot }) {
+interface Props {
+  controller: SimulationController
+  /** Samples known to the latest snapshot, and the world id: the charts re-render only when these change. */
+  historyLength: number
+  worldId: number
+}
+
+/** Memoised: re-renders only when a history sample is recorded (or a different world is loaded). */
+export const HistoryCharts = memo(function HistoryCharts({ controller, historyLength, worldId }: Props) {
   const [table, setTable] = useState(false)
   const state = controller.state
-  // History only changes when a sample is recorded, so derive it once per sample
-  // (exactly the samples the current snapshot knows about).
-  const historyLength = snapshot.historyLength
+  void worldId
   const data = useMemo(() => {
     const h = getHistory(state).slice(0, historyLength)
     const total = state.map.discovered.length
@@ -103,4 +109,4 @@ export function HistoryCharts({ controller, snapshot }: { controller: Simulation
       </p>
     </section>
   )
-}
+})

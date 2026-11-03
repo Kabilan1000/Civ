@@ -228,7 +228,7 @@ berry bush and tree *not targeted by another citizen*, nearest rest spot
 | share   | carrying berries, not hungry, a hungry (< 45) reachable neighbour: 0.9 × generosity × (0.4 + 0.6·their hunger) × distance (§3.10) |
 | socialize | 0 if satiety/energy < 35 or on cooldown; rising(loneliness, 0.15, 0.8) × (0.6 + 0.6·sociability) × best partner factor, ×0.4 at night (§3.10) |
 | explore | 0 unless satiety and energy ≥ 45; (0.25 + 0.3·curiosity) × role (explorer 1.6, others 0.3) × min(1, gain/20) × distance, ×1.15 after a recent discovery, ×0.3 at night (§3.12) |
-| deliver | 0 if carrying nothing; else 0.25 + 0.55 × fullness (+0.1 if the village has no food) |
+| deliver | 0 if carrying nothing; else 0.25 + 0.55 × fullness (+0.1 if the village has no food). 0 for wood that a reachable planned site still needs (M9: that wood goes to the site — see the build/deliver loop fix in §3.9). |
 | forage / chop | 0.5 × role × (0.8 + 0.4·diligence) × demand × distance factor × (1 − ½ fullness) × (½ at night). Demand rises from 0.15 with stockpile shortage (food: below 6 per citizen, or personal hunger; wood: below 40). |
 | wander  | (0.1 + 0.08·curiosity) × role (explorer 1.5) — fallback |
 
@@ -281,7 +281,10 @@ only, planned once) → arrival phase (`ai/phases.ts`): `gather`, `deposit`,
     (all wood delivered; labour adds `buildProgress`) → `complete`.
   - **Planning:** every 10 ticks, if living citizens exceed shelter capacity
     (planned shelters included) and no shelter is unfinished, ONE site is
-    planned on the nearest valid tile to the campfire.
+    planned on the valid tile with the shortest WALK from the campfire (BFS
+    steps, at most `SITE_MAX_WALK_STEPS` = 12), then Manhattan, then index.
+    (M9: Manhattan-first ordering picked a tile 3 tiles away but 23 steps
+    round a rock ridge on one seed.)
   - **Valid sites:** discovered grass/sand/treeless forest with no resource
     node (bushes and trees — even depleted, they regrow), not another
     structure or an occupied tile, Manhattan 3–6 from the campfire, no other
@@ -334,9 +337,9 @@ self-references and unknown ids. Crossing affinity 50 / −40 emits a
 
 | | Who | Time | Effects |
 | --- | --- | --- | --- |
-| chat | initiator + recruited listener, both alive and within 2 tiles | 8 ticks after the partner joins | social +30 each, familiarity +6, affinity +(5 + 6 × the *other's* sociability), `chat` memory each |
-| argue | same conversation, seeded roll: P = 0.05 + 0.2·(1 − mean sociability) + 0.3·stress + 0.25·bad blood, ≤ 0.6 | same | social +8, familiarity +3, affinity −(8 + 6·(1 − own resilience)), `argument` memory, event |
-| share | giver carrying berries → hungry neighbour (< 45 satiety) within 2 tiles | 3 ticks | ≤ 2 berries move from the giver's load into the receiver's stomach (+25 satiety each, `ledger.foodEaten`), affinity +5 giver / +15 receiver, social +15 each, `gaveFood` / `receivedFood` memories, `sharedFood` event |
+| chat | initiator + recruited listener, both alive and within 2 tiles | 8 ticks after the partner joins | social +30 each, familiarity +6, affinity +(5 + 6 × the *other's* sociability) — halved while one already resents the other (affinity < −10: grudges heal slowly), `chat` memory each |
+| argue | same conversation, seeded roll: P = 0.05 + 0.2·(1 − mean sociability) + 0.3·stress + 0.25·bad blood, ≤ 0.6 | same | social +8, familiarity +3, affinity −(12 + 8·(1 − own resilience)), `argument` memory, event |
+| share | giver carrying berries → hungry neighbour (< 55 satiety) within 2 tiles | 3 ticks | ≤ 2 berries move from the giver's load into the receiver's stomach (+25 satiety each, `ledger.foodEaten`), affinity +5 giver / +15 receiver, social +15 each, `gaveFood` / `receivedFood` memories, `sharedFood` event |
 
 - **Partner choice:** available partners only — alive, not asleep, not in
   critical need, and idle, wandering or merely walking to a job; within 10
@@ -633,6 +636,14 @@ history below it; a right sidebar with the dashboard and inspector. Below
 980 px it becomes one column ordered map → dashboard/inspector → feed →
 history (so a tapped citizen's details are right under the map).
 
+- **Keyboard** (M9, `ui/shortcuts.ts`): Space play/pause, 1/2/3 speed,
+  Escape closes the topmost dialog or deselects. Not while typing in a
+  field, with Ctrl/⌘/Alt, or (for Space) on a focused control. A legend sits
+  in the footer; controls carry `aria-keyshortcuts` and tooltips.
+- **Clock wording**: times between midnight and dawn are shown as
+  “(late night)” — days begin at 06:00, so they still belong to that day.
+- **Accessibility**: visible `:focus-visible` rings, labelled controls,
+  reduced-motion respected, text colours ≥ 4.5:1 against their panels.
 - **Controls**: pause/resume, 1x/3x/10x, seed field (+ random seed) and
   Restart, Save and Load (M8; `•` on Save marks unsaved progress).
 - **Dashboard** (`components/Dashboard.tsx`): population (and deaths), day &
@@ -737,8 +748,19 @@ Engine tests live next to the code (`src/sim/**/*.test.ts`).
   BFS (`path/flood.distanceFieldMask`), and frontiers cached by discovered-
   tile count. These are derived caches keyed on every input they depend on,
   never serialized; results are identical without them.
-- Measured (Node): ≈0.11 ms/tick with the island fully explored; 10 000
-  ticks ≈ 1.1 s.
+- Measured (Node, M9 sweep): ≈0.15 ms/tick averaged over 30 seeds × 30
+  days and 100-day runs (budget 1 ms). Saves ≈105 KB at day 30 and ≈155 KB
+  at day 100, where the 600-sample history cap is reached (bounded).
+- **Adaptive render resolution** (`render/quality.ts`, M9): the canvas
+  starts at min(devicePixelRatio, 2), also capped at ≈4.2 M device pixels.
+  1.5 s windows of frame intervals are compared by median: two slow windows
+  (> 28 ms) step down one level (2 → 1.5 → 1.25 → 1 → 0.75); six fast
+  windows (< 18 ms) plus a 10 s cooldown step up; a level that proves slow
+  again right after rising becomes a permanent ceiling (no oscillation).
+  Changing level re-bakes the cached map/resource textures once; it never
+  affects the simulation. Headless software-GPU, 1280×800: M8 117 ms/frame
+  at DPR 2 and 33 ms at DPR 1 → M9 16.7 ms (60 fps) at both, settling at
+  0.75×. Real GPUs that hold 60 fps stay at full density.
 - React re-renders ≤ 5 Hz; Pixi updates only dynamic layers each frame.
 - If needed later, the sim can move to a Web Worker unchanged (it's pure).
 
@@ -837,7 +859,9 @@ Each milestone is merged only when its "done when" holds and `npm test`,
 | **M6** | **Social, memory & exploration** — relationships, interactions, memory, `socialize`, `explore`, fog reveal. | Social & memory tests; explorers expand the discovered area. |
 | **M7** | **UI** — dashboard, citizen inspector (incl. decision scores), event feed, click-to-select. | All panels live-update at ≤ 5 Hz without frame drops at 10x. |
 | **M8** | **Persistence & restart** — save slots, autosave, load, restart with seed, migrations scaffold, error handling. | Save → reload page → load resumes identical world; corrupt save handled. |
-| **M9** | **Balance & polish** — tune constants, balance test across seeds, soak/invariant test, perf pass. | Balance + perf tests pass; 30-minute 10x soak has no errors. |
+| **M9** | **Balance & polish** — long-run sweep (`npm run sweep`), evidence-based tuning, construction loop fix, adaptive render resolution, keyboard shortcuts, accessibility, README. | Sweep invariants hold over 30 seeds × 30 days and 3 × 100 days; perf tests pass; browser soak at 10x has no errors. |
+
+All milestones M0–M9 are complete (the MVP).
 
 ### Out of scope for the MVP
 

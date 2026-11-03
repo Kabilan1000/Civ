@@ -8,10 +8,11 @@ import {
   MAX_SITE_WORKERS,
   SHELTER_CAPACITY,
   SITE_MAX_CAMP_DISTANCE,
+  SITE_MAX_WALK_STEPS,
   SITE_MIN_CAMP_DISTANCE,
 } from './constants.ts'
 import { isPassable, manhattan, neighbors4, toIndex, toPoint } from './grid.ts'
-import { reachableMask } from './path/flood.ts'
+import { distanceField, reachableMask } from './path/flood.ts'
 import type { Citizen, Structure, TileIndex, WorldState } from './types.ts'
 
 export function getCampfire(state: WorldState): Structure | undefined {
@@ -148,7 +149,11 @@ export function isValidSite(state: WorldState, tile: TileIndex, campTile: TileIn
   return count(walk(tile)) === before - 1
 }
 
-/** Best site: nearest valid tile to the campfire (Manhattan, then tile index). Null if none. */
+/**
+ * Best site: the valid tile with the shortest WALK from the campfire (BFS
+ * steps over walkable tiles, at most SITE_MAX_WALK_STEPS), then Manhattan
+ * distance, then tile index. Null if none.
+ */
 export function chooseSite(state: WorldState): TileIndex | null {
   const camp = getCampfire(state)
   if (!camp) return null
@@ -166,8 +171,16 @@ export function chooseSite(state: WorldState): TileIndex | null {
       if (reachable[tile] === 1) candidates.push(tile)
     }
   }
-  candidates.sort((a, b) => manhattan(toPoint(a, map.width), campPoint) - manhattan(toPoint(b, map.width), campPoint) || a - b)
-  for (const tile of candidates) {
+  const walk = distanceField(map, camp.tile, (x) => map.discovered[x] === 1 && !solid.has(x))
+  const steps = (t: TileIndex) => walk[t]!
+  const near = candidates.filter((t) => steps(t) >= 0 && steps(t) <= SITE_MAX_WALK_STEPS)
+  near.sort(
+    (a, b) =>
+      steps(a) - steps(b) ||
+      manhattan(toPoint(a, map.width), campPoint) - manhattan(toPoint(b, map.width), campPoint) ||
+      a - b,
+  )
+  for (const tile of near) {
     if (isValidSite(state, tile, camp.tile, reachableCount)) return tile
   }
   return null

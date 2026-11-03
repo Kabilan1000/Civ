@@ -147,6 +147,50 @@ describe('construction rules', () => {
   })
 })
 
+describe('construction regressions (M9)', () => {
+  // Camp at (1,4); a rock wall at x=3 (rows 1..6) with gaps only at the top and bottom edges.
+  const RIDGE = [
+    '..........',
+    '...#......',
+    '...#......',
+    '...#......',
+    '...#......',
+    '...#......',
+    '...#......',
+    '..........',
+  ]
+
+  it('ranks sites by walking distance from camp, not straight-line distance', () => {
+    const { state } = sandbox(RIDGE, { camp: [1, 4], citizens: [{ x: 0, y: 0 }] })
+    const tile = chooseSite(state)!
+    const p = toPoint(tile, 10)
+    // (4,4) is only 3 tiles away in a straight line but a long walk round the ridge; a same-side tile wins.
+    expect(p.x).toBeLessThan(3)
+  })
+
+  it('a builder hauling wood on a long detour delivers it to the site instead of looping back to camp', () => {
+    // A wall at x=3 from y=1 down to the bottom: from camp (1,12) to the site at (5,12) is a ~26-step walk
+    // round the top, although they are 4 tiles apart. (M9 bug: deliver outscored the long haul and the
+    // builder carried the wood back to camp, forever.)
+    const rows = Array.from({ length: 14 }, (_, y) => (y === 0 ? '........' : '...#....'))
+    const { state, citizens: [b] } = sandbox(rows, { camp: [1, 12], citizens: [{ x: 1, y: 12, role: 'builder' }], food: 300, wood: 30 })
+    const site: Structure = {
+      id: 950, kind: 'shelter', tile: toIndex(5, 12, 8), stage: 'planned', buildProgress: 0, buildCost: SHELTER_WORK_TICKS,
+      woodDelivered: 0, woodRequired: SHELTER_WOOD, lastWorkTick: 0, residentIds: [],
+    }
+    state.structures.push(site)
+    state.nextId = 951
+    let woodTakenBackToCamp = 0
+    for (let t = 0; t < 2000 && site.stage !== 'complete'; t++) {
+      const before = b!.task
+      step(state)
+      if (b!.task && b!.task !== before && b!.task.kind === 'deliver' && b!.carrying?.kind === 'wood') woodTakenBackToCamp++
+    }
+    expect(woodTakenBackToCamp).toBe(0)
+    expect(site.stage).toBe('complete')
+  })
+})
+
 describe('sleeping', () => {
   it('restores energy faster at home than outdoors, and outdoor rest still works', () => {
     expect(ENERGY_RATES.restingHome).toBeGreaterThan(ENERGY_RATES.resting)

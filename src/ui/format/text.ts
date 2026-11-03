@@ -15,11 +15,18 @@ import {
 
 const pad = (n: number) => String(n).padStart(2, '0')
 
-/** "Day 3 · 14:30" for a tick. */
+/**
+ * "Day 3 · 14:30" for a tick. Days begin at dawn (06:00), so times after
+ * midnight still belong to the same day; they are labelled "late night" so
+ * that "Day 6 · 00:48 (late night)" reads as later than "Day 6 · 22:42".
+ */
 export function formatTick(tick: number): string {
   const m = minuteOfDayAt(tick)
-  return `Day ${dayNumberAt(tick)} · ${pad(Math.floor(m / 60))}:${pad(m % 60)}`
+  const late = m < 6 * 60 ? ' (late night)' : ''
+  return `Day ${dayNumberAt(tick)} · ${pad(Math.floor(m / 60))}:${pad(m % 60)}${late}`
 }
+
+export const DAY_BOUNDARY_HINT = 'Days begin at dawn (06:00). Times after midnight still belong to the same day.'
 
 export const ACTION_LABELS: Record<ActionKind, string> = {
   eat: 'Eat',

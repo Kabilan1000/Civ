@@ -1,48 +1,155 @@
 # Little Worlds
 
-An autonomous 2D civilization simulator for the browser. A small colony of
-citizens gathers food and wood, builds shelters, rests, forms relationships and
-remembers what happened to them — you watch, inspect and control time.
+An autonomous 2D civilization simulator for the browser. Twelve citizens arrive
+on a procedurally generated island with a campfire and nothing else. They
+forage berries, chop wood, build shelters, sleep, talk, argue, share food,
+explore the fog and remember what happened to them. You don't steer them: you
+watch, inspect anyone you like, control time, and save the worlds you want to
+keep.
 
-**Status:** Milestone M0 (project scaffold). See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
-for the design and milestone plan, and [`CLAUDE.md`](CLAUDE.md) for project rules.
+Every world comes from a **seed**: the same seed always grows the same island
+and, tick for tick, the same village.
 
-## Requirements
+## Technologies
 
-- Node.js 20.19+ or 22.12+ (developed on Node 22)
-- npm 10+
+- **TypeScript**, **React 19** and **Vite** for the app
+- **PixiJS 8** for the map (WebGL, with a CSP-safe build)
+- **Vitest** for tests (the simulation runs headless in Node)
+- **localStorage** for saved worlds — no server, no external services, no AI APIs
 
-## Setup
+The simulation (`src/sim/`) is a pure, deterministic TypeScript engine with no
+browser, React or PixiJS code; rendering and UI only read it. See
+[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the full design and
+[`CLAUDE.md`](CLAUDE.md) for the project's rules.
+
+## Local setup
+
+Requires Node.js 20.19+ or 22.12+ (developed on Node 22) and npm 10+.
 
 ```bash
 npm install
 ```
 
-## Scripts
-
-| Command              | What it does                                       |
-| -------------------- | -------------------------------------------------- |
-| `npm run dev`        | Start the Vite dev server (http://localhost:5173)  |
-| `npm run build`      | Type-check all projects, then build to `dist/`     |
-| `npm run preview`    | Serve the production build locally                 |
-| `npm test`           | Run the Vitest suite once (Node environment)       |
-| `npm run test:watch` | Run Vitest in watch mode                           |
-| `npm run typecheck`  | Type-check only (`tsc -b`)                         |
-| `npm run lint`       | Lint with oxlint                                   |
-
-## Project layout
-
-```
-src/
-  sim/          Pure, deterministic simulation engine (no DOM, React or PixiJS)
-  app/          SimulationController: game loop, speed, save/load glue
-  render/       PixiJS renderer (reads sim state, never writes it)
-  persistence/  localStorage save slots
-  ui/           React components
-docs/           Architecture and design notes
+```bash
+npm run dev
 ```
 
-TypeScript runs in strict mode. `src/sim` is additionally type-checked against a
-DOM-free config (`tsconfig.sim.json`), and an architecture test
-(`src/sim/__tests__/architecture.test.ts`) rejects forbidden imports and
-non-deterministic APIs such as `Math.random` and `Date`.
+Then open http://localhost:5173.
+
+## Commands
+
+| Command              | What it does                                                    |
+| -------------------- | --------------------------------------------------------------- |
+| `npm run dev`        | Start the dev server (http://localhost:5173)                    |
+| `npm run build`      | Type-check everything, then build a static site into `dist/`    |
+| `npm run preview`    | Serve the production build locally                              |
+| `npm test`           | Run the test suite once                                         |
+| `npm run test:watch` | Run tests in watch mode                                         |
+| `npm run sweep`      | Long-run balance sweep (30 seeds × 30 days + 3 × 100 days, ~6 min) |
+| `npm run typecheck`  | Type-check only                                                 |
+| `npm run lint`       | Lint with oxlint                                                |
+
+`dist/` uses relative paths, so it can be served from any static host or folder.
+
+## How to play
+
+The village runs by itself. Things you can do:
+
+- **Control time** — Play/Pause, and 1×, 3× or 10× speed. One in-game day is
+  240 ticks; at 1× that is 48 seconds.
+- **Inspect a citizen** — click them on the map, or a name anywhere in the
+  panels. A gold ring follows them. The inspector has four tabs:
+  - *Overview* — needs (satiety, energy, social, health), what they're doing
+    and where they're heading, what they carry, their home and housemates,
+    their personality.
+  - *Decision* — every action's score from their last decision and a plain
+    explanation of why they're doing what they're doing.
+  - *Bonds* — how they feel about each person they've met, and how that person
+    feels back (feelings can be one-sided), plus how well they know each other.
+  - *Memories* — what actually happened to them, newest first.
+- **Read the village** — the Civilization panel shows population, stockpiles,
+  housing, exploration, average needs and friendships/rivalries; the Events
+  feed (filterable) shows what happened; History charts show the last 60 days.
+
+What to expect in a typical world: shelters go up on day 1–2 and everyone is
+housed by about day 2–3; explorers open up most of the island within a few
+days; friendships form over the first weeks; arguments are common, lasting
+rivalries rare. Citizens die only if their health reaches zero — from
+starvation or exhaustion — which is rare with the current balance.
+
+**The clock.** Days begin at dawn (06:00), so a time after midnight such as
+“Day 6 · 00:48 (late night)” still belongs to day 6 and comes after
+“Day 6 · 22:42”.
+
+## Saving and loading
+
+Click **Save** or **Load** to open the saved-worlds dialog:
+
+- Three manual slots plus one **Autosave** slot. Each shows the seed, in-game
+  day and time, population and when it was saved.
+- Saving over a used slot, deleting a slot, and loading over unsaved progress
+  all ask for confirmation. A dot on the Save button means there is unsaved
+  progress.
+- **Autosave** writes only the Autosave slot, after every 5 minutes of
+  *running* time, if the world has changed. Closing the tab may skip the last
+  autosave.
+- A loaded world starts **paused** — press Play to continue. It continues
+  exactly as it would have.
+- Damaged slots are marked and can't be loaded; saves from newer versions are
+  refused with a clear message; saves from older versions are upgraded
+  automatically. If anything goes wrong, the running world is left untouched.
+
+Saves live in your browser's local storage for this site only; private windows
+or blocked site data disable saving. A world is about 50–160 KB.
+
+## World seeds
+
+Type any text into the seed field (or press 🎲 for a random one) and press
+**Restart** (or Enter). The same seed always creates the same island and the
+same starting village; different seeds give different islands. Restarting
+asks first if there is unsaved progress, and never touches saved slots.
+
+## Keyboard shortcuts
+
+| Key          | Action                                   |
+| ------------ | ---------------------------------------- |
+| `Space`      | Play / pause                             |
+| `1` `2` `3`  | Speed 1× / 3× / 10×                      |
+| `Esc`        | Close the topmost dialog, or deselect    |
+
+Shortcuts don't fire while you type in a text field or hold Ctrl/⌘/Alt, and
+Space activates a focused button instead of pausing.
+
+## Testing
+
+```bash
+npm test
+```
+
+```bash
+npm run sweep
+```
+
+`npm test` runs the full suite (simulation, persistence, controller, render
+logic, UI formatting) in Node in about half a minute. It covers determinism and
+save/resume, map generation, pathfinding, needs, the AI, construction, social
+behaviour, memory, exploration, resource conservation (checked every tick),
+history, save slots and migrations from every earlier save format.
+
+`npm run sweep` is the long-run check: 30 seeds for 30 in-game days and three
+100-day runs, verifying invariants on every tick and printing survival,
+housing, food/wood, exploration, social and performance figures.
+
+## Known limitations
+
+- Twelve citizens and a 36 × 24 map are fixed; there are no births, ageing,
+  trade or player commands (by design for the MVP).
+- Saves are per-browser (localStorage); there is no cloud sync or file
+  export.
+- The event feed keeps only the last 200 events; history keeps the last 60
+  days.
+- On weak or software-only graphics the map lowers its drawing resolution
+  automatically (down to 0.75×) to stay smooth, which makes it slightly
+  softer.
+- Rivalries are uncommon: citizens avoid people they've argued with.
+- The interface is dark-only.

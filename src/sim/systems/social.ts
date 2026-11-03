@@ -29,6 +29,8 @@ import {
   CHAT_SOCIAL,
   CHAT_TICKS,
   CRITICAL_ENERGY,
+  GRUDGE_AFFINITY,
+  GRUDGE_HEALING,
   CRITICAL_SATIETY,
   EAT_STOP_SATIETY,
   FOOD_SATIETY,
@@ -137,11 +139,11 @@ export function resolveConversation(state: WorldState, a: Citizen, b: Citizen): 
     }
     pushEvent(state, 'argument', [a.id, b.id])
   } else {
-    interact(
-      state, a, b, CHAT_FAMILIARITY,
-      CHAT_AFFINITY_BASE + CHAT_AFFINITY_CHARM * b.personality.sociability,
-      CHAT_AFFINITY_BASE + CHAT_AFFINITY_CHARM * a.personality.sociability,
-    )
+    // Grudges heal slowly: someone who resents the other warms up only half as fast.
+    const warmth = (self: Citizen, other: Citizen) =>
+      (CHAT_AFFINITY_BASE + CHAT_AFFINITY_CHARM * other.personality.sociability) *
+      (affinityOf(self, other.id) < GRUDGE_AFFINITY ? GRUDGE_HEALING : 1)
+    interact(state, a, b, CHAT_FAMILIARITY, warmth(a, b), warmth(b, a))
     for (const [self, other] of [[a, b], [b, a]] as const) {
       self.needs.social = clampNeed(self.needs.social + CHAT_SOCIAL)
       remember(state, self, 'chat', 0.3, { subjectId: other.id })

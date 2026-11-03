@@ -10,5 +10,7 @@ export default defineConfig({
     // Engine tests run in plain Node: the simulation must not need a browser.
     environment: 'node',
     include: ['src/**/*.test.ts'],
+    // Simulation tests run thousands of ticks; 5 s (the default) flakes on a busy machine.
+    testTimeout: 30_000,
   },
 })

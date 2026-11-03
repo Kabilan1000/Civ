@@ -10,7 +10,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc -b",
-    "lint": "oxlint"
+    "lint": "oxlint",
+    "sweep": "LW_SWEEP=1 vitest run src/sim/__tests__/long.sweep.test.ts --silent=false"
   },
   "dependencies": {
     "pixi.js": "^8.22.0",

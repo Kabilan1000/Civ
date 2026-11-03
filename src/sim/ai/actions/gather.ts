@@ -4,6 +4,8 @@
 import {
   CARRY_CAPACITY,
   FOOD_RESERVE_PER_CITIZEN,
+  FOOD_SURPLUS_RESERVES,
+  FORAGE_SURPLUS_DEMAND,
   NIGHT_WORK_FACTOR,
   ROLE_WEIGHTS,
   SHELTER_WOOD,
@@ -33,7 +35,10 @@ function scoreGather(ctx: DecisionContext, kind: ResourceKind): number {
   if (kind === 'berries') {
     const shortage = 1 - Math.min(1, stock.food / (FOOD_RESERVE_PER_CITIZEN * Math.max(1, ctx.livingCount)))
     const hunger = 1 - c.needs.satiety / 100
-    demand = MIN_DEMAND + (1 - MIN_DEMAND) * Math.max(shortage, hunger)
+    const reserve = FOOD_RESERVE_PER_CITIZEN * Math.max(1, ctx.livingCount)
+    // A large surplus lowers the floor further, so foragers stop hoarding (hunger still counts).
+    const floor = stock.food >= reserve * FOOD_SURPLUS_RESERVES ? FORAGE_SURPLUS_DEMAND : MIN_DEMAND
+    demand = floor + (1 - floor) * Math.max(shortage, hunger)
   } else {
     // Housing raises the wood target so builders keep chopping until homes are built.
     const target = WOOD_TARGET + housingWoodNeed(ctx.state, SHELTER_WOOD)

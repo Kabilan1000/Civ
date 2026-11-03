@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react'
-import type { SimulationController, SimulationSnapshot } from '../../app/SimulationController.ts'
+import { memo, useMemo, useState } from 'react'
+import type { SimulationController } from '../../app/SimulationController.ts'
 import { EVENT_CATEGORIES, MAX_EVENTS, getEvents, type EventCategory } from '../../sim/index.ts'
 import { CATEGORY_LABELS, describeEvent, formatTick } from '../format/text.ts'
 import { CitizenLink } from './CitizenLink.tsx'
@@ -8,16 +8,17 @@ const ORDER: EventCategory[] = ['social', 'construction', 'exploration', 'surviv
 
 interface Props {
   controller: SimulationController
-  snapshot: SimulationSnapshot
+  /** Newest stored event id and world id: the feed re-renders only when these change. */
+  lastEventId: number
+  worldId: number
   onSelect: (id: number) => void
 }
 
-export function EventFeed({ controller, snapshot, onSelect }: Props) {
+/** Memoised: the 5 Hz snapshot does not re-render the (up to 200-row) feed unless an event arrived. */
+export const EventFeed = memo(function EventFeed({ controller, lastEventId, worldId, onSelect }: Props) {
   const [active, setActive] = useState<EventCategory[]>([])
   const state = controller.state
-  // Events up to the snapshot's newest one (consistent with the rest of the UI);
-  // recomputed only when a new event is stored or the filter changes.
-  const lastEventId = snapshot.lastEventId
+  void worldId // a different world is a different `state`, but make the dependency explicit
   const events = useMemo(() => getEvents(state, active).filter((e) => e.id <= lastEventId), [state, active, lastEventId])
   const nameOf = (id: number) => state.citizens.find((c) => c.id === id)?.name ?? `#${id}`
   const toggle = (c: EventCategory) => setActive((a) => (a.includes(c) ? a.filter((x) => x !== c) : [...a, c]))
@@ -68,4 +69,4 @@ export function EventFeed({ controller, snapshot, onSelect }: Props) {
       </p>
     </section>
   )
-}
+})

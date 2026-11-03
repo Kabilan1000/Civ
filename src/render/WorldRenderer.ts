@@ -48,6 +48,7 @@ import { BakedLayer } from './BakedLayer.ts'
 import { ResourceSprites } from './ResourceSprites.ts'
 import { lightingAt } from './daylight.ts'
 import { fitWorld, type WorldFit } from './layout.ts'
+import { AdaptiveQuality, qualityLevels } from './quality.ts'
 import { pickCitizen, screenToWorld, type RenderedCitizen } from './selection.ts'
 import { WorldChangeTracker } from './worldChange.ts'
 import { COLORS, ROLE_COLORS, TERRAIN_COLORS, TILE_SIZE, shade, tileNoise } from './palette.ts'
@@ -101,7 +102,7 @@ async function createPixiApp(): Promise<PixiHandle> {
     // antialiased at bake time, so only the small citizen shapes forgo it.
     antialias: false,
     autoDensity: true,
-    resolution: Math.min(window.devicePixelRatio || 1, 2),
+    resolution: 1, // replaced by the adaptive quality level once the canvas has a size
     autoStart: false, // the SimulationController drives rendering
     sharedTicker: false,
   })
@@ -133,6 +134,9 @@ export class WorldRenderer implements FrameRenderer {
   private hoverId: number | null = null
   private pickListener: ((id: number | null) => void) | null = null
   private canvas: HTMLCanvasElement | null = null
+  /** Adaptive canvas resolution (render/quality.ts); affects pixels drawn, never the simulation. */
+  private quality: AdaptiveQuality | null = null
+  private lastFrameAt = 0
   private readonly fireGlows: Graphics[] = []
   private lastTint = -1
 
@@ -227,15 +231,24 @@ export class WorldRenderer implements FrameRenderer {
     return this.lifecycle.current?.app ?? null
   }
 
+  /** Current canvas resolution (device pixels per CSS pixel). */
+  get resolution(): number {
+    return this.app?.renderer.resolution ?? 1
+  }
+
   private resize(): void {
     const app = this.app
-    if (!app || !this.mapRef) {
-      app?.renderer.resize(Math.max(1, this.parent.clientWidth), Math.max(1, this.parent.clientHeight))
-      return
-    }
     const w = Math.max(1, this.parent.clientWidth)
     const h = Math.max(1, this.parent.clientHeight)
-    app.renderer.resize(w, h)
+    // Pixel-density caps depend on the canvas size, so recompute the levels on every resize.
+    const levels = qualityLevels(window.devicePixelRatio || 1, w, h)
+    if (!this.quality) this.quality = new AdaptiveQuality(levels)
+    const resolution = this.quality.setLevels(levels)
+    if (!app) return
+    if (app.renderer.resolution !== resolution) this.bakedScale = 0 // textures must match the new density
+    app.renderer.resize(w, h, resolution)
+    if (this.canvas) this.canvas.dataset.resolution = String(resolution)
+    if (!this.mapRef) return
     const fit = fitWorld(w, h, this.mapRef.width * TILE_SIZE, this.mapRef.height * TILE_SIZE)
     this.world.scale.set(fit.scale)
     this.world.position.set(fit.x, fit.y)
@@ -309,6 +322,7 @@ export class WorldRenderer implements FrameRenderer {
       this.drawStructures(state)
     }
 
+    this.adaptQuality()
     this.updateCitizens(state, alpha)
     this.applyLighting(minuteOfDayAt(state.tick) + alpha * MINUTES_PER_TICK)
     this.animateFire()
@@ -341,6 +355,15 @@ export class WorldRenderer implements FrameRenderer {
       const { x, y } = toPoint(i, map.width)
       g.rect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE).fill({ color: COLORS.fog, alpha: COLORS.fogAlpha })
     })
+  }
+
+  /** Feed the frame interval to the quality controller; apply a change (rare) by re-fitting. */
+  private adaptQuality(): void {
+    const now = performance.now() // rendering only; never fed into the simulation
+    const interval = now - this.lastFrameAt
+    this.lastFrameAt = now
+    const next = this.quality?.sample(interval, now)
+    if (next != null) this.resize()
   }
 
   /** Tint layers for the time of day; only touches Pixi when the tint actually changes. */

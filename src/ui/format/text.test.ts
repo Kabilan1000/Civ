@@ -6,6 +6,10 @@ describe('presentation text', () => {
   it('formats ticks with the sim clock (tick 0 = Day 1 06:00)', () => {
     expect(formatTick(0)).toBe('Day 1 · 06:00')
     expect(formatTick(240 + 10)).toBe('Day 2 · 07:00')
+    // After midnight the day has not ended yet (days begin at dawn).
+    expect(formatTick(188)).toBe('Day 1 · 00:48 (late night)')
+    expect(formatTick(239)).toBe('Day 1 · 05:54 (late night)')
+    expect(formatTick(240)).toBe('Day 2 · 06:00')
   })
 
   it('describes every stored event of a real run, keeping citizens as references', () => {
