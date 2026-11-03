@@ -570,7 +570,12 @@ Tuning numbers (decay rates, costs, thresholds, curve parameters) live in
   changes; React reads it via `useSyncExternalStore` (`app/useSimulation.ts`).
 - The frame scheduler is injectable, so the loop is unit-tested in Node.
 - Done (M3): `setSpeed(1|3|10)`, `setPaused`, `togglePause`, `start/stop/dispose`,
-  `setRenderer/detachRenderer`. Planned (M8): `restart(seed)`, `save`, `load`.
+  `setRenderer/detachRenderer`.
+- M8: `loadWorld(state)` replaces the world in one assignment (after the
+  save was fully validated elsewhere), pauses, resets the accumulator and
+  bumps `worldId`; `restart(config)` = `loadWorld(createWorld(config))`;
+  `markSaved()` clears the snapshot's `unsaved` flag. The frame loop is never
+  restarted, so loads/restarts can't create a second loop.
 
 UI-only state (selected citizen, open panels) lives in React, not in the sim.
 
@@ -628,8 +633,8 @@ history below it; a right sidebar with the dashboard and inspector. Below
 980 px it becomes one column ordered map → dashboard/inspector → feed →
 history (so a tapped citizen's details are right under the map).
 
-- **Controls**: pause/resume, 1x/3x/10x (seed/restart/save/load stay
-  disabled until M8).
+- **Controls**: pause/resume, 1x/3x/10x, seed field (+ random seed) and
+  Restart, Save and Load (M8; `•` on Save marks unsaved progress).
 - **Dashboard** (`components/Dashboard.tsx`): population (and deaths), day &
   time, food, wood, housed/capacity with shelters built and building,
   explored %, friendships · rivalries, average satiety/energy/health/social
@@ -660,21 +665,46 @@ history (so a tapped citizen's details are right under the map).
 - Dev builds expose `window.__littleWorlds` (the controller) for automated
   browser checks; it is stripped from production builds.
 
-## 8. Persistence
+## 8. Persistence (M8, `persistence/storage.ts`, `app/Autosaver.ts`)
 
 ```ts
 interface SaveFile {
-  format: 'little-worlds-save';
-  schemaVersion: number;
-  savedAt: string;          // set by app layer, not sim
-  state: WorldState;
+  format: 'little-worlds-save'
+  fileVersion: 1
+  meta: { seed, tick, day, hour, minute, population, schemaVersion, savedAt }
+  world: WorldState            // plain serialize() output, any supported schema
 }
 ```
 
-- localStorage keys: `little-worlds:save:<slot>` (3 slots + autosave).
-- `deserialize` validates shape and runs `migrations[schemaVersion]` stepwise.
-- Corrupt/unknown saves fail gracefully with a UI message; never crash.
-- Expected save size: well under 200 KB.
+- **Slots:** localStorage keys `little-worlds:save:slot1|slot2|slot3`
+  (manual) and `little-worlds:save:autosave` (only the Autosaver writes it).
+  `savedAt` is browser time in the file metadata only — never in the world.
+- **SaveStore** (storage injectable for tests) returns result objects and
+  never throws: `unavailable` (no/blocked storage), `quota` (full — nothing
+  is half-written), `empty`, `corrupt` (bad JSON, wrong format, damaged
+  details or failed validation, with the validator's path), `unsupported`
+  (newer file or schema version). `list()` fully validates each occupied
+  slot so damage is visible before loading; damaged slots keep their
+  readable details.
+- **Loading** runs `deserialize` (stepwise migrations v1→…→v5, then full
+  validation); only a valid world is handed to `controller.loadWorld`, so a
+  failed load never touches the running world.
+- **Autosave:** a check every 10 s counts *running* (unpaused) time; after 5
+  minutes it writes the autosave slot if the world (worldId + tick) changed
+  since the last autosave. A `busy` flag prevents overlap; failures are
+  reported (toast + dialog line) and the simulation keeps running. A
+  best-effort attempt on `pagehide` is made, but nothing relies on it.
+- **Renderer refresh on load:** `render/worldChange.ts` detects a different
+  world by object identity (not `map.version`, which coincides between
+  worlds) and the renderer drops all cached views, sprites, structures and
+  the baked map before rebuilding.
+- **UI:** the Save/Load dialog lists the four slots (seed, day/time,
+  population, save date; Empty / Saved world / Damaged) with Save, Load and
+  Delete; overwriting, deleting, loading over unsaved progress and
+  restarting over unsaved progress all ask for confirmation. Loaded and
+  restarted worlds start paused. The selection is keyed by `worldId`
+  (`ui/selection.ts`), so it resets on load/restart.
+- Typical save size ≈ 50–60 KB.
 
 ## 9. Testing strategy (Vitest, Node environment)
 

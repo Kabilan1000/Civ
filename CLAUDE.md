@@ -31,6 +31,7 @@ Full design: `docs/ARCHITECTURE.md` — read it before structural changes and ke
 15. **Rendering: no full-screen overlays.** Use container tints, baked layers and small sprites; measure frame time in the browser after visual changes.
 16. **Derived caches** (walk mask, frontiers) are allowed in `sim/` only if keyed on every input they depend on and never stored in `WorldState`; results must be identical without them.
 17. **Memories record only real events**, written where the event happens. Social interactions require both participants alive and within `INTERACT_RADIUS`; nobody waits for an absent partner.
+18. **Persistence stays outside `src/sim/`.** Saves go through `persistence/SaveStore` (result objects, never throws); a world is only swapped in via `SimulationController.loadWorld` after full validation. Browser timestamps live in save metadata, never in `WorldState`.
 
 ## Working style
 

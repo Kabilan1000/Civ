@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { createWorld, deserialize, serialize, stepN } from '../sim/index.ts'
 import { MAX_TICKS_PER_FRAME, SimulationController, type FrameScheduler } from './SimulationController.ts'
 
 /** Manual frame scheduler: frames fire only when the test calls runFrame(). */
@@ -147,5 +148,59 @@ describe('SimulationController', () => {
     fake.runFor(500)
     expect(fake.pending.size).toBe(0)
     expect(renders).toBe(r)
+  })
+
+  it('restart with the same seed recreates the same world; different seeds differ', () => {
+    const { fake, ctrl } = make()
+    ctrl.restart({ seed: 'again' })
+    const first = serialize(ctrl.state)
+    ctrl.start()
+    ctrl.setPaused(false)
+    fake.runFor(2000)
+    ctrl.restart({ seed: 'again' })
+    expect(serialize(ctrl.state)).toBe(first)
+    expect(ctrl.state.tick).toBe(0)
+    ctrl.restart({ seed: 'something else' })
+    expect(serialize(ctrl.state)).not.toBe(first)
+  })
+
+  it('loading replaces the world atomically, pauses, bumps worldId and keeps one loop', () => {
+    const { fake, ctrl } = make()
+    const renders: unknown[] = []
+    ctrl.setRenderer({ render: (s) => void renders.push(s) })
+    ctrl.start()
+    fake.runFor(1000)
+    const saved = createWorld({ seed: 'saved' })
+    stepN(saved, 333)
+    const incoming = deserialize(serialize(saved))
+    const id = ctrl.getSnapshot().worldId
+
+    ctrl.loadWorld(incoming)
+    expect(ctrl.state).toBe(incoming)
+    expect(ctrl.getSnapshot()).toMatchObject({ paused: true, worldId: id + 1, seed: 'saved', tick: 333, unsaved: false })
+    expect(renders.at(-1)).toBe(incoming) // the renderer is handed the new world immediately
+    expect(fake.pending.size).toBe(1) // still exactly one frame loop
+
+    fake.runFor(1000)
+    expect(ctrl.state.tick).toBe(333) // paused until Play
+    ctrl.togglePause()
+    fake.runFor(1000)
+    expect(ctrl.state.tick).toBe(338)
+    expect(fake.pending.size).toBe(1)
+    // The loaded world continues exactly as the original would.
+    stepN(saved, 5)
+    expect(serialize(ctrl.state)).toBe(serialize(saved))
+  })
+
+  it('tracks unsaved progress', () => {
+    const { fake, ctrl } = make()
+    expect(ctrl.getSnapshot().unsaved).toBe(false)
+    ctrl.start()
+    fake.runFor(1000)
+    expect(ctrl.getSnapshot().unsaved).toBe(true)
+    ctrl.markSaved()
+    expect(ctrl.getSnapshot().unsaved).toBe(false)
+    ctrl.restart({ seed: 'fresh' })
+    expect(ctrl.getSnapshot().unsaved).toBe(false)
   })
 })

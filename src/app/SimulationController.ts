@@ -61,6 +61,11 @@ export interface SimulationSnapshot {
   lastEventId: number
   /** Number of history samples (changes only when a sample is recorded). */
   historyLength: number
+  /** Increments whenever the world object is replaced (load / restart). */
+  worldId: number
+  seed: string
+  /** True when the world has advanced since it was created, loaded or last saved. */
+  unsaved: boolean
 }
 
 export class SimulationController {
@@ -75,6 +80,9 @@ export class SimulationController {
   private readonly listeners = new Set<() => void>()
   private snapshot: SimulationSnapshot
   private readonly scheduler: FrameScheduler
+  private worldId = 1
+  /** Tick at which the current world was last saved, loaded or created. */
+  private savedTick = 0
 
   constructor(config: Partial<WorldConfig> = {}, scheduler: FrameScheduler = browserScheduler) {
     this.scheduler = scheduler
@@ -109,6 +117,38 @@ export class SimulationController {
     this.stop()
     this.renderer = null
     this.listeners.clear()
+  }
+
+  /**
+   * Replace the running world with `next` (already validated/deserialized).
+   * Atomic: one assignment, so there is never a half-replaced world. Pauses
+   * (the user presses Play to resume), resets the timing accumulator and
+   * bumps worldId so the renderer and UI rebuild everything. The frame loop
+   * is untouched — no second loop is ever started.
+   */
+  loadWorld(next: WorldState): void {
+    this.world = next
+    this.worldId++
+    this.savedTick = next.tick
+    this.paused = true
+    this.accumulatorMs = 0
+    this.renderer?.render(this.world, 0)
+    this.publish()
+  }
+
+  /** Start a fresh world from a seed (same seed ⇒ identical world). Paused until Play. */
+  restart(config: Partial<WorldConfig>): void {
+    this.loadWorld(createWorld(config))
+  }
+
+  /** Record that the current world was saved at its current tick (clears "unsaved"). */
+  markSaved(): void {
+    this.savedTick = this.world.tick
+    this.publish()
+  }
+
+  get currentWorldId(): number {
+    return this.worldId
   }
 
   setRenderer(renderer: FrameRenderer | null): void {
@@ -198,6 +238,9 @@ export class SimulationController {
       stats: getCivStats(this.world),
       lastEventId: this.world.events.at(-1)?.id ?? 0,
       historyLength: this.world.history.length,
+      worldId: this.worldId,
+      seed: this.world.config.seed,
+      unsaved: this.world.tick !== this.savedTick,
     }
   }
 

@@ -46,6 +46,7 @@ import { ResourceSprites } from './ResourceSprites.ts'
 import { lightingAt } from './daylight.ts'
 import { fitWorld, type WorldFit } from './layout.ts'
 import { pickCitizen, screenToWorld, type RenderedCitizen } from './selection.ts'
+import { WorldChangeTracker } from './worldChange.ts'
 import { COLORS, ROLE_COLORS, TERRAIN_COLORS, TILE_SIZE, shade, tileNoise } from './palette.ts'
 
 interface CitizenView {
@@ -137,6 +138,7 @@ export class WorldRenderer implements FrameRenderer {
   private terrainCopy: Terrain[] = []
   private discoveredCopy: (0 | 1)[] = []
   private structuresKey = ''
+  private readonly worldTracker = new WorldChangeTracker<WorldState>()
 
   constructor(parent: HTMLElement) {
     this.parent = parent
@@ -254,9 +256,26 @@ export class WorldRenderer implements FrameRenderer {
     this.mapLayer.bake(app.renderer, this.mapRef.width * TILE_SIZE, this.mapRef.height * TILE_SIZE, this.displayResolution)
   }
 
+  /**
+   * A different world (load/restart): drop everything cached from the old one
+   * — citizen views (ids are reused across worlds), structures, resource
+   * sprites and the baked map — so the next lines rebuild it all.
+   */
+  private resetForNewWorld(): void {
+    for (const view of this.citizenViews.values()) view.root.destroy({ children: true })
+    this.citizenViews.clear()
+    this.renderedCitizens.length = 0
+    this.structuresKey = ''
+    this.resources.clear()
+    this.mapRef = null
+    this.mapVersion = -1
+    this.lastTint = -1
+  }
+
   render(state: WorldState, alpha: number): void {
     const app = this.app
     if (!app) return
+    if (this.worldTracker.changed(state)) this.resetForNewWorld()
 
     if (state.map !== this.mapRef) {
       // New world: redraw everything and re-fit (re-bakes all layers).
