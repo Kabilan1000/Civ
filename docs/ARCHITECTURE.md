@@ -881,3 +881,11 @@ All milestones M0–M9 are complete (the MVP).
 
 Births/ageing, player commands, combat, trading, multiple settlements, map
 sizes beyond config, Web Worker sim, sprites/art assets, external AI APIs.
+
+### Next phase (preproduction, not implemented)
+
+The Living World expansion (M10–M14) is being designed in
+[`design/LIVING_WORLD_GDD.md`](design/LIVING_WORLD_GDD.md) (game design and
+roadmap) and [`design/LIVING_WORLD_TDS.md`](design/LIVING_WORLD_TDS.md)
+(data models, system order, budgets and the M10 specification). Both are
+drafts awaiting approval; this document describes only what is built.
