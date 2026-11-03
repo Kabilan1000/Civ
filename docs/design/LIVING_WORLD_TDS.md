@@ -1,12 +1,11 @@
 # Little Worlds — Living World Expansion
-## Technical Design Specification (preproduction draft for review)
+## Technical Design Specification (preproduction, revision 2)
 
-Status: **draft for review — nothing here is implemented.** It is the
-companion to [`LIVING_WORLD_GDD.md`](LIVING_WORLD_GDD.md), whose §1–5 and §8
-cover game design and the roadmap. This document holds §6 (architecture)
-and §7 (detailed M10 specification). All rules in [`CLAUDE.md`](../../CLAUDE.md)
-still apply. Where this document proposes changing how a rule is applied, it
-says so explicitly.
+Status: **design for review — nothing here is implemented.** This is the
+companion to [`LIVING_WORLD_GDD.md`](LIVING_WORLD_GDD.md), which covers game
+design and the roadmap. This document holds §6 (architecture) and §7 (the
+detailed M10 specification). All rules in [`CLAUDE.md`](../../CLAUDE.md)
+apply. The change log is at the end.
 
 ---
 
@@ -14,550 +13,573 @@ says so explicitly.
 
 ### 6.0 What exists today (v0.1, schema v5)
 
-These parts of the current code shape the design:
-
-| Area | Current behaviour | Consequence for the expansion |
+| Area | Current behaviour (file) | Consequence |
 |---|---|---|
-| `map.resources[i]` | `{kind, amount, max}` or `null`. Plants never die. A plant at 0 stays and regrows. | M10 extends `ResourceNode`. AI and renderer already treat `amount ≤ 0` as "nothing to gather". |
-| `systems/resources.ts` | Stateless regrowth: `tick % 48` (berries) / `% 160` (wood), +1 for every node below max. | Replaced by `systems/ecology.ts`. Regrowth stays stateless but depends on stage. |
-| Map generation | Moisture and elevation exist only during generation. Resources are placed with the map RNG. | Habitat uses terrain alone. Plant ages come from a **separate** derived stream so the tick-0 map is unchanged. |
-| `map.version` | Bumped by every gather and regrowth. The renderer re-bakes **only if terrain or fog changed**, otherwise it just syncs sprites (O(tiles)). | Germination, stage changes and deaths are cheap sprite updates. No re-bake. |
-| `ResourceSprites` | One sprite per node, with textures by fill level (`b0–b6`, `t0–t4`). | Add stage textures: seedling, young, old and snag. |
-| AI context | Scans all tiles per decision for the nearest node with `amount > 0` (BFS distance). | Seedlings are naturally ignored. At 100+ citizens this scan needs an index (§6.7). |
-| `chooseSite` | Requires `resources[tile] === null`. | M10 allows seedling tiles (0 units) to be claimed. |
-| Ledger + conservation test | Checked every tick. | Add `foodDecayed`/`woodDecayed` (§6.6). |
-| Saves | SaveStore over localStorage; v5 ≈ 105 KB at day 30, 155 KB at day 100. | M10 adds about 8 KB (§7.8). Populations (M13) need relationship caps and archiving. |
+| Resources | `map.resources[i]` = `{kind, amount, max}` or `null`; immortal; regrows at 0 (`types.ts`) | M10 extends `ResourceNode`. AI and renderer already ignore `amount ≤ 0`. |
+| Regrowth | Stateless `tick % 48` / `% 160`, +1 per node below max (`systems/resources.ts`) | Replaced by `systems/ecology.ts`, still stateless and stage-aware. |
+| Map gen | Moisture exists only during generation; resources use the map RNG (`map/generate.ts`) | Habitat uses terrain. Plant ages come from a separate stream, so the tick-0 map is unchanged. |
+| IDs | **One shared counter** `nextId` for citizens, structures, memories **and events** (`ids.ts`, `events.ts:15`) | Any new event shifts all later IDs (§6.4). |
+| ID use | Order only: memory eviction tie-break (`citizens/memory.ts:54`), shelter and homeless order (`construction.ts:92,100`), memory sort (`selectors.ts:302`). **No sim code reads `state.events`.** | Extra allocations preserve relative order and behaviour, but change serialized state. |
+| `map.version` | Bumped by gather and regrowth. The renderer re-bakes only if terrain or fog changed; otherwise it syncs sprites in O(tiles) (`WorldRenderer.ts:306`). | Germination and death are cheap sprite updates. |
+| Housing | `housingDeficit = living − shelters×3` (`structures.ts:76`); plan only if > 0 (`construction.ts:35`) | No spare capacity, ever. The M13 deadlock and its fix are in GDD §4.4. |
+| Ledger | Conservation checked every tick | Gains `foodDecayed`/`woodDecayed`. |
+| Saves | v5 ≈ 105 KB at day 30, 155 KB at day 100 | M10 adds ≈ 16 KB raw. |
 
-### 6.1 Proposed TypeScript data models
+### 6.1 Data models
 
-Only the **M10** shapes are normative for implementation, once approved.
-The M12–M14 shapes are reserved designs, listed so that M10 doesn't paint
-them into a corner.
+The M10 block is normative once approved. The other blocks are reserved, to
+avoid incompatibility.
 
 ```ts
-// ── M10 (schema v6) ─────────────────────────────────────────────────────────
+// ── M10b/M10c (schema v6) ───────────────────────────────────────────────────
 export type PlantStage = 'seedling' | 'young' | 'mature' | 'old' | 'dead'
 
 export interface ResourceNode {
-  kind: ResourceKind            // 'berries' | 'wood'  (unchanged)
-  amount: number                // whole units, 0..max (unchanged)
-  /** Cap for the current stage; stored so AI/renderer stay stage-agnostic. */
-  max: number
-  stage: PlantStage
-  /** May be negative: plants older than the world. Age = tick − bornTick. */
-  bornTick: number
-  /** Whole days; rolled at germination (or assigned at creation/migration). */
-  lifespanDays: number
-  /** Tick of death (stage 'dead', trees only); null while alive. */
-  diedTick: number | null
-}
-
-export interface EcologyCounters {      // cumulative since world creation (or migration)
-  births: { berries: number; wood: number }
-  deaths: { berries: number; wood: number }
-  seedsCast: number
+  kind: ResourceKind            // 'berries' | 'wood' (unchanged)
+  amount: number                // whole units, 0..max
+  max: number                   // cap for the current stage (stored: AI/renderer stay stage-agnostic)
+  stage: PlantStage             // 'dead' only for wood (harvestable deadwood)
+  bornTick: number              // may be negative (older than the world)
+  lifespanDays: number          // whole days
+  diedTick: number | null       // non-null iff stage === 'dead'
+  // RESERVED (post-M13): species?: 'pioneer' | ...   — absent ⇒ pioneer
 }
 
 export interface EcologyState {
-  /** Dedicated sfc32 stream: ecology never perturbs the AI stream (and vice versa). */
-  rng: RngState
-  counters: EcologyCounters
+  rng: RngState                                   // dedicated stream (§6.4)
+  counters: {
+    births: { berries: number; wood: number }
+    deaths: { berries: number; wood: number }
+    seedsCast: number
+    fallenFruitSprouts: number
+  }
 }
 
-export interface Ledger {
-  // ...existing seven fields...
-  /** Units that left the world on dying/old plants (bush death, old-age cap drop, snag rot). */
-  foodDecayed: number
-  woodDecayed: number
+export interface Ledger {       // + 2 fields
+  foodDecayed: number           // berries lost on bush death / old-age cap drop
+  woodDecayed: number           // deadwood rot / cap drop
 }
 
-export interface HistorySample {
-  // ...existing fields...
-  /** M10+. Absent in samples recorded before the save was migrated (charts show a gap). */
-  bushes?: number        // living berry bushes, all stages
-  trees?: number         // living trees, all stages (snags excluded)
-  seedlings?: number     // both kinds
-  snags?: number
-  standingFood?: number  // berries currently on bushes
-  standingWood?: number  // wood on living trees + snags
-  forageNearCamp?: number // berries on discovered bushes ≤ 10 BFS steps from camp
+export interface HistorySample {  // + optional fields (absent in pre-v6 samples)
+  bushes?: number; trees?: number; seedlings?: number; snags?: number
+  standingFood?: number; standingWood?: number
+  forageNearCamp?: number       // berries on discovered bushes ≤ 10 BFS steps from camp
+  nearestRipeBushSteps?: number // −1 if none reachable
 }
 
-export interface WorldState {
-  // ...existing...
+export interface WorldState {   // + 2 fields
   ecology: EcologyState
+  /** Separate counter for event ids (v6+), so new event kinds never shift entity ids. */
+  nextEventId: number
 }
+// No new SimEventKind in M10. No per-plant events.
 
-// New SimEventKind members: 'seasonStarted' | 'yearStarted'   (data: {season, year})
-// No per-plant events (they would flood the 200-event feed).
-
-// ── Reserved: M12–M13 (schema v7+) — design only ────────────────────────────
-interface CitizenLifeFields {
-  bornTick: number
-  parentIds: [number, number] | null
-  partnerId: number | null
-  childIds: number[]
-  lineage: string               // family tag shown in the UI
-}
-type DeathCause = 'starvation' | 'exhaustion' | 'oldAge'
-interface PersonRecord {        // archive of the long dead
-  id: number; name: string; role: Role
-  bornTick: number; diedTick: number; cause: DeathCause
-  parentIds: [number, number] | null; partnerId: number | null
-  notableEventIds: number[]     // ≤ 3
-}
-interface YearSummary {         // chronicle, one per world year
-  year: number; popStart: number; popEnd: number
-  births: number; deaths: number; built: number; ruined: number
-  bushes: number; trees: number
-  notable: { tick: number; kind: string; citizenIds: number[] }[] // ≤ 8
-}
-// WorldState.archive: PersonRecord[]; WorldState.chronicle: YearSummary[] (≤ 200)
-
+// ── Reserved: M12–M13 ───────────────────────────────────────────────────────
+// Citizen += { bornTick; parentIds: [number, number] | null; partnerId: number | null;
+//              childIds: number[]; householdId: number }
+// Household { id; memberIds: number[]; homeId: number | null; formedTick; lastBirthTick: number | null }
+// DeathCause += 'oldAge'
+// PersonRecord, YearSummary (GDD §4.5);  WorldState += { households, archive, chronicle }
 // ── Reserved: M14 ───────────────────────────────────────────────────────────
-// Structure += { condition: number; builtTick: number; lastRepairTick: number;
-//                salvageWood: number }   StructureStage += 'ruin'
-// Ledger += { woodUsed: number }          (repairs)
+// Structure += { condition; builtTick; lastRepairTick; salvageWood };  stage += 'ruin'
+// Ledger += { woodUsed }
+// ── Reserved: Hand phase / M10e prototype ───────────────────────────────────
+// WorldState += { inputs: { tick: number; kind: string; tile?: number }[] }  (not in M10e: saving disabled)
 ```
-
-**Shape rules respected:** plain JSON, ids not references, integers wherever
-possible. `max` and `stage` are stored rather than derived so that
-validation, the renderer and the AI need no knowledge of the calendar.
 
 ### 6.2 System update order
 
-Current: `time → needs (death) → resources → construction → decide → act → history`.
-
 ```
-1. time          advanceTime; at day start also seasonStarted / yearStarted   (M10)
-2. needs         satiety/energy/social/health; starvation & exhaustion death
-3. ecology       (M10, replaces resources)
-                   every tick:  stage-aware regrowth (stateless modulo timing)
-                   at dawn:     age → stage transitions, deaths, snag rot,
-                                seed casting & germination (ecology RNG)
-4. lifeCycle     (M12/M13) birthdays: natural-death hazard; daily household birth check
-5. construction  planning, staging, abandonment; (M14) decay, ruins
-6. decide        utility AI (unchanged pipeline)
-7. act           tasks: movement, gathering, social, (M14) repair/salvage
-8. history       samples (+ecology fields); (M12) chronicle year roll-up
+1. time          tick++ (and existing dayStarted). No calendar events.
+2. needs         unchanged (starvation / exhaustion death)
+3. ecology       (M10b, replaces resources)
+                   every tick: stage-aware regrowth (stateless modulo)
+                   dawn (tick-of-day 0): stage pass (age → stage, cap drops, deaths,
+                                         fallen fruit, deadwood rot), then seed pass
+4. lifeCycle     (M12/M13) birthdays, household checks
+5. construction  unchanged in M10, except chooseSite may claim seedling tiles
+6. decide        unchanged
+7. act           unchanged
+8. history       + optional ecology fields (M10d)
 ```
 
-**Why ecology is in slot 3:** it is the same slot as today's regrowth, so the
-AI sees the dawn's new seedlings and dead plants in the same tick, and the
-conservation check (after `step`) sees a complete ledger.
-
-**Dawn work:** dawn work runs at tick-of-day 0 (06:00), when most citizens
-are asleep, so mid-task surprises are rare. A plant dying under a forager is
-handled by the existing `gather` guard: `!node || amount <= 0` ends the task.
+Ecology takes the old regrowth slot, so the AI sees the dawn's changes in the
+same tick. Dawn work happens while most citizens sleep. A plant that
+disappears under a task is handled by the existing guard
+(`tasks.ts`: `!node || amount <= 0` ends the task).
 
 ### 6.3 Performance budgets
 
-These are measured headless in Node with the same method as `npm run sweep`.
-"Now" is the M9 result.
+These are measured headless in Node, as in `npm run sweep`. These are hard
+gates for each milestone that claims a population size.
 
-| Citizens | `step()` avg | Worst single tick (dawn) | Save size @ 100 days | Frame (1×, browser) | Notes |
+| Citizens | `step()` avg | Worst tick | Save @ 100 d | Browser frame (1×) | Prerequisites |
 |---|---|---|---|---|---|
-| 12 | **≤ 0.25 ms** (now 0.145–0.166) | ≤ 2 ms | ≤ 175 KB (now 155) | ≤ 16.7 ms | M10 target |
-| 50 | ≤ 0.8 ms | ≤ 4 ms | ≤ 450 KB | ≤ 16.7 ms | needs a resource index + relationship cap (M13) |
-| 100 | ≤ 1.5 ms | ≤ 6 ms | ≤ 900 KB | ≤ 16.7 ms at 1×; 10× may shed resolution | adaptive decision interval; virtualised citizen list |
-| 200 | ≤ 3 ms | ≤ 10 ms | ≤ 1.8 MB (needs compression) | sim in a Web Worker | localStorage quota (~5 MB) is the hard wall |
+| 12 | ≤ 0.25 ms (now 0.145–0.166) | ≤ 2 ms | ≤ 175 KB (now 155) | ≤ 16.7 ms | M10 |
+| 50 | ≤ 0.8 ms | ≤ 4 ms | ≤ 450 KB | ≤ 16.7 ms | resource index; relationship cap (M13) |
+| 100 | ≤ 1.5 ms | ≤ 6 ms | ≤ 900 KB | ≤ 16.7 ms (10× may shed resolution) | scaled decision interval; virtual lists |
+| 200 | ≤ 3 ms | ≤ 10 ms | ≤ 1.8 MB (compressed) | sim in a Worker | localStorage quota (~5 MB) |
 
-The ecology system alone must cost ≤ 0.03 ms per tick on average, and ≤ 1 ms
-on the dawn tick, for a 36×24 map.
+The ecology system must cost ≤ 0.03 ms per tick on average and ≤ 1 ms on the
+dawn tick (36 × 24 map).
 
-### 6.4 Deterministic randomness
+### 6.4 Determinism, randomness and IDs
 
-- **Streams.** There are two streams in M10: `state.rng` (AI, unchanged) and
-  `state.ecology.rng`.
-  - **New worlds:** the ecology stream is seeded with
-    `seedRng(seed + '#ecology')`.
-  - **Migrated saves:** it is seeded with
-    `seedRng(seed + '#ecology@' + tick)`, which is deterministic for a given
-    save.
-  - Later streams (`population`, `structures`) follow the same pattern.
-  - Separate streams mean ecology tuning never changes the AI's draw
-    sequence, and the reverse. Tests can then isolate each system.
-- **Initial plant ages** are drawn from a third, *creation-only* derived
-  stream, `seedRng(seed + '#flora')`, after map generation, in ascending tile
-  order. The tick-0 terrain and resources for every existing seed are
-  therefore **identical** to v0.1. A test pins this with a hash of the v0.1
-  map for several seeds.
-- **Iteration order** is ascending tile index for every ecology pass. The
-  seed-casting order is fixed (tiles ascending, berries pass then wood pass),
-  and germination conflicts within one dawn are resolved first come, first
-  served in that order.
-- **Integer arithmetic only:** suitability and chances are integers in
-  [0, 100] or per-mille, compared with `nextInt(rng, 0, 999)`. There is no
-  `Math.pow`, `exp` or trigonometry (rule 2). Ages are in whole days.
-- **Player inputs (Hand phase, later)** become a serializable
-  `inputs: {tick, kind, args}[]` log. Replay = seed + inputs.
+**RNG streams** [approved]:
 
-### 6.5 Versioned save migration
+- `state.rng` (AI, unchanged).
+- `state.ecology.rng`, seeded `seed + '#ecology'` for new worlds and
+  `seed + '#ecology@' + tick` for migrated saves.
+- A creation-only `seed + '#flora'` stream for initial plant ages.
 
-- **v5 → v6 (M10):**
-  1. For each resource node, in ascending tile order, set `stage = 'mature'`,
-     keep `amount` and `max`, and set
-     `lifespanDays = berries ? 28 + h % 17 : 90 + h % 61` and
-     `bornTick = tick − ageDays·240`. The age `ageDays` is drawn from the
-     mature window, `matureStart + h % (matureEnd − matureStart)`. Here
-     `h = hash32(seed, tileIndex)` (an integer FNV-1a hash; no RNG state
-     involved). Ages are therefore **staggered**, so there is no synchronous
-     die-off (risk R1).
-  2. Set `diedTick = null`.
-  3. Add `ledger.foodDecayed = 0` and `woodDecayed = 0`.
-  4. Add `ecology` with zeroed counters and the migrated RNG stream (§6.4).
-  5. Keep history samples unchanged. Their ecology fields stay absent; the
-     past is not fabricated, matching the v4→v5 precedent.
-- **Validation** (`validateWorld`):
-  - `stage` must be in the enum.
-  - `amount` and `max` must be integers with `0 ≤ amount ≤ max ≤ KIND_MAX`.
-  - `max` must match the stage's cap: equal for non-dead stages, ≤ for
-    snags.
-  - `lifespanDays` must be an integer in [1, 1000].
-  - `diedTick` must be non-null exactly when `stage === 'dead'`, and `dead`
-    is only allowed for wood.
-  - The counters must be non-negative integers.
-- **Fixtures:** add `m9-save-v5.json`, a real v0.1 save at about day 20. It
-  must load, migrate, run 30 days with conservation checked, and round-trip.
-  All older fixtures (v2, v3, v4) must still load through v6.
-- **Policy (unchanged):** a newer save is refused, a damaged one is marked,
-  and a world is swapped in only after full validation.
+The tick-0 terrain and resource placement for every existing seed are
+unchanged. Iteration is in ascending tile index. Arithmetic is integer only
+(‰ chances compared with `nextInt(rng, 0, 999)`), with no `pow`, `exp` or
+trigonometry.
+
+**Shared ID allocator: investigation and decision:**
+
+- **Facts:**
+  - `pushEvent` allocates from the same `nextId` as citizens, structures and
+    memories.
+  - Within one `step`, allocation order is deterministic.
+  - IDs affect behaviour **only through relative order** (the tie-breaks
+    listed in §6.0). Inserting extra allocations shifts all later IDs by the
+    same amount and preserves their relative order.
+  - No sim system reads `state.events`.
+- **So adding `seasonStarted`/`yearStarted` events in M10a would:**
+  - (a) leave behaviour unchanged;
+  - (b) still change `serialize()`: every later ID, `nextId`, memory IDs
+    inside citizens and event IDs;
+  - (c) change *which* events fit in the 200-event window. The feed would
+    show different history, and selectors that read events would return
+    different results.
+  - It would no longer be a calendar-only change in any verifiable sense.
+- **Decision for M10a:** **no sim events.**
+  - The UI derives boundaries from `tick` with the pure calendar functions.
+  - Clock: `Spring 3, Year 1 · 14:42`.
+  - Event feed: a **separator row** ("— Summer, Year 1 —") is inserted
+    between displayed events whose ticks straddle a season start. It is
+    computed from adjacent ticks and never stored.
+  - History charts: season bands are computed from sample ticks.
+  - M10a touches no file under `src/sim/` except a new `calendar.ts`, which
+    is pure functions exported via `sim/index.ts`. `SCHEMA_VERSION` stays 5.
+- **Decision for M10b (schema v6):**
+  - Events get their own counter, `nextEventId`. The migration sets it to
+    the current `nextId`, so all existing IDs stay unique.
+  - From then on, a new event kind can never shift citizen, structure or
+    memory IDs.
+  - **Ecology allocates no IDs.** Plants are identified by tile index.
+  - Verified: there is no cross-type ID comparison in the sim. Event IDs are
+    used only for feed keys and the selectors' "since" cursor
+    (`lastEventId`), which compare event IDs with event IDs only. This is to
+    be re-checked by grep in M10b.
+
+**Determinism tests (accurate definitions):**
+
+| Test | Definition |
+|---|---|
+| **D1 M10a parity (golden)** | Before any M10a code, a script at the current commit records `sha256(serialize(state))` for 5 seeds at ticks 0, 240, 2880, 11520 and 28800 into `__tests__/fixtures/golden-v5.json`, along with the commit hash. M10a must reproduce **every hash byte for byte**. It is retired in M10b, where behaviour changes intentionally. |
+| **D2 Same-version replay** | Two `createWorld(seed)` + `stepN(n)` runs give identical `serialize()` (existing test, extended to 60 days with ecology). |
+| **D3 Save/resume** | Serialize at a **dawn tick** (and mid-dispersal day 13, a spring flush), deserialize, step both copies by k, compare. |
+| **D4 Stream isolation** | Ecology draws only from `ecology.rng`: run a dawn and assert that `state.rng` is unchanged by `updateEcology`. The AI draws never touch `ecology.rng`, with the reverse assertion around `decide`/`act`. |
+| **D5 No-rescue (metamorphic)** | Two worlds identical except for stockpile food (0 against 500) and citizen satiety: after the same ecology step, `map.resources`, `ecology` and the ledger's ecology terms are identical. This shows the ecology never reads colony need. |
+| **D6 Seed stability** | Hashes of tick-0 terrain plus resource kinds and amounts equal pinned v0.1 values for 5 seeds (recorded with D1). |
+| **D7 ID-shift invariance** (verifies the analysis, run once in M10b) | In a sandbox, inject k extra `allocateId` calls at a fixed tick. Afterwards, compare the worlds with IDs renumbered by rank: decisions, positions, tasks and the ledger must be identical. |
+
+### 6.5 Versioned save migration (v5 → v6, M10b)
+
+1. **Nodes**, in ascending tile order, with `h = fnv1a32(seed + ':' + tile)`
+   (integer, no RNG state):
+   - Set `stage = 'mature'` and keep `amount` and `max`.
+   - Set `lifespanDays = LIFE_MIN + h % (LIFE_MAX − LIFE_MIN + 1)`.
+   - Set `ageDays = MATURE_AT + (h >>> 8) % (oldAt(lifespan) − MATURE_AT)`.
+   - Set `bornTick = tick − ageDays × 240` and `diedTick = null`.
+2. `ledger.foodDecayed = woodDecayed = 0`.
+3. `ecology = { rng: seedRng(seed + '#ecology@' + tick), counters: zeros }`.
+4. `nextEventId = nextId`.
+5. History samples are left unchanged; ecology fields stay absent and are
+   not fabricated.
+
+**Validation:**
+
+- `stage` must be in the enum, and `dead` is only allowed for wood.
+- Integers with `0 ≤ amount ≤ max`.
+- `max` must equal the stage cap; for `dead`, it must not exceed the mature
+  cap.
+- `lifespanDays` must be in [1, 1000].
+- `diedTick` must be non-null exactly when the stage is `dead`.
+- The counters must be non-negative integers.
+- `nextEventId > every event id`.
+
+**Fixtures:** a new `m9-save-v5.json` (a real v0.1 save at about day 20). It
+must load, migrate, run 30 days with conservation checked every tick, and
+round-trip. The v2–v4 fixtures must still load.
+
+**Policy unchanged:** newer saves are refused, damaged ones marked, and a
+world is swapped in only after full validation.
 
 ### 6.6 Interaction with existing systems
 
-| System | M10 change | Rule touched |
+| System | M10 change | Rule |
 |---|---|---|
-| Resources/terrain | Terrain is unchanged. Plants appear, age and die on the existing `resources` array. | 11: bump `map.version` on any germination, stage change, death or rot. |
-| Conservation | `foodDecayed`/`woodDecayed`. Germination adds 0 units. Stage cap drops send the excess to decay. Snag rot is −1 unit to decay. | 13: identity extended, still checked every tick. |
-| Pathfinding | None. Plants are not solid. | 5, 14 |
-| Walk-mask / frontier caches | Unaffected: they key on structures and on `discovered` respectively. Germination does not change `discovered`. | 16 |
-| AI | Unchanged scoring. `amount > 0` already excludes seedlings and bare plants. Snags count as wood (they have `amount > 0`). Remembered-spot memories of a dead bush simply stop matching. | 6, 17 (no fabricated memories of plant deaths) |
-| Construction | `chooseSite` treats a seedling tile as free and removes the seedling (0 units) when the site is planned. Germination never targets the settled clearing or planned sites. | 14 |
-| Events | `seasonStarted` and `yearStarted` only, formatted in the UI. | 10 |
-| History | Optional ecology fields in samples (§6.1). The 600-sample cap is unchanged. | — |
-| Renderer | `ResourceSprites` gains textures `bs` (bush seedling), `ts` (tree seedling), `ty0..ty2` (young), `to1..to4` (old: muted canopy) and `td0..td4` (snag). The level key is derived from `stage`. `sync` already handles nodes appearing and vanishing. A seasonal tint is a container tint on the terrain layer (M11). | 15 (no overlays), 12 |
-| UI | Clock shows the season and year. Dashboard ecology card and an Ecology chart. All text is formatted in the UI. | 7, 10 |
-| Selectors | `ecologySummary(state)` (counts by kind and stage, standing units, forage near camp). It is pure and covered by tests. | 12 |
+| Terrain | none | — |
+| Resources | lifecycle on the existing array; `map.version++` on germination, stage change, death or rot | 11 |
+| Conservation | decay terms; germination adds 0 units | 13 |
+| Pathfinding, walk mask, frontier caches | none (plants aren't solid; keys unchanged) | 5, 14, 16 |
+| AI | unchanged scoring; seedlings ignored (`amount 0`); deadwood is choppable wood; remembered spots of dead plants stop matching | 6, 17 |
+| Construction | `chooseSite` treats a seedling tile as free and clears it (0 units) | 14 |
+| Events | none added in M10; separate event counter from v6 | 10 |
+| History | optional ecology fields; 600-sample cap unchanged | — |
+| Renderer | stage textures (seedling, young, old, deadwood); `sync` already handles appear/vanish; no overlays | 12, 15 |
+| UI | calendar-derived clock, separators and chart bands; ecology card and chart | 7, 10 |
+| Selectors | `ecologySummary`, `nearestRipeBushSteps` (pure) | 12 |
 
 ### 6.7 Known migration and scaling risks
 
 | # | Risk | Mitigation |
 |---|---|---|
-| R1 | **Synchronous die-off** of migrated or initial plants that all share a birth date | Hash- or RNG-staggered ages over the mature window. Test: in the first 60 days no single dawn kills more than 10% of either kind. |
-| R2 | **Forage death spiral:** near-camp bushes are picked bare, can't seed and die, so foragers walk further and food falls | Bands in the sweep acceptance; `forageNearCamp` tracked; seeding threshold is tunable (`BUSH_SEED_MIN_FRUIT`); far bushes keep reseeding. Fallback if needed: seeds can also come from bushes holding ≥ 1 berry. |
-| R3 | **Forest crowds out shelter sites** | Settled clearing, seedling-claimable sites, trees on grass at only 15/40 suitability. The sweep requires housing by median day ≤ 3. |
-| R4 | **Runaway or extinct populations** | Crowding plus a safety cap, and seed thresholds. 400-day runs check that counts stay within the bands; the sweep fails if the cap is ever hit. |
-| R5 | **Cross-version divergence confusion** | Docs and README state that saves resume under new rules, while seeds keep the same island. |
-| R6 | **Save growth** (4 new fields × ~130 nodes) | About 8 KB; budget ≤ 175 KB at 100 days. Field names stay short only if needed (not planned). |
-| R7 | **Sprite churn** costs frame time | Germination and deaths happen a few times a day; `sync` is O(tiles) only on a version change. Measured in the soak. |
-| R8 | **O(n²) relationships at 50–200 citizens** (M13) | Cap at 32 records per citizen, evicting by lowest familiarity. Archive the dead. Decide at M13. |
-| R9 | **Per-decision full-map scans** (BFS + resource scan) at 100+ citizens | A per-kind node index cached on `map.version`; a bounded BFS radius; staggered decision intervals that scale with population. |
-| R10 | **localStorage quota** at 200 citizens | Archive, relationship caps, optional compressed save format (a SaveFile `fileVersion` bump), and a quota error surfaced by SaveStore (already a result object). |
-| R11 | **Dawn spikes** at larger maps | Ecology dawn work is O(plants); if needed, spread it across the first 20 ticks by tile index modulo (still deterministic). |
+| R1 | Synchronous die-off of initial or migrated plants | Hash- or RNG-staggered ages (hard gate H6) |
+| R2 | Forage collapse near camp | Permitted outcome. Natural recovery mechanisms (GDD §3.10); balance targets B7/B8; tunable seed threshold |
+| R3 | Forest crowds out shelter sites | Clearing plus seedling-claimable sites (hard gate H4) |
+| R4 | Runaway or extinct populations | Crowding, an enforced safety cap (H3), balance bands (B5/B6) |
+| R5 | Cross-version confusion | Docs: saves resume under new rules; seeds keep their islands |
+| R6 | Save growth | ≈ 16 KB raw; budget gate |
+| R7 | Sprite churn | A few changes per day; measured in the soak |
+| R8 | O(n²) relationships at 50+ | Per-citizen cap (M13) |
+| R9 | Per-decision full scans at 100+ | Per-kind index keyed on `map.version`; bounded BFS |
+| R10 | localStorage quota at 200 | Archive, caps, compressed format (SaveFile `fileVersion` bump) |
+| R11 | Dawn spikes on large maps | Spread dawn work over 20 ticks by tile modulo (deterministic) |
+| R12 | A new event kind silently shifts entity IDs | `nextEventId` from v6; D1 golden test for M10a |
+| R13 | M13 housing deadlock | Headroom, overcrowding-as-demand, household assignment (GDD §4.4) |
 
 ---
 
 ## 7. Detailed M10 specification
 
-**Scope (only):** calendar foundation; natural appearance of bushes and
-trees; growth and aging; natural disappearance; habitat constraints;
-observable regeneration; a basic ecology dashboard.
+**In scope:** calendar foundation; natural appearance, growth, aging and
+disappearance of bushes and pioneer trees; habitat; observable regeneration
+and recovery; basic ecology dashboard.
 
-**Not in M10:** wildlife, citizen aging or reproduction, gods or player
-influence, settlement decay, seasonal fruiting or need changes, new speeds
-and terrain change.
+**Out of scope:** wildlife, citizen aging or reproduction, gods, settlement
+decay, seasonal fruiting or need changes, new speeds, terrain change and tree
+species.
 
-M10 ships as four sub-milestones (GDD §8): **M10a → M10d**, each committed
-separately with its own tests.
+M10 ships as **M10a → M10d**, each committed separately. M10e (the
+prototype) is optional and separately approved.
 
-### 7.1 Exact mechanics
+### 7.1 Mechanics
 
-**Calendar (M10a)** — new `sim/calendar.ts`, pure functions of `tick`:
+**M10a — Calendar (UI-derived, no sim state).** `sim/calendar.ts` holds
+pure functions of `tick`:
 
 ```
-dayIndex     = floor(tick / 240)                  (existing)
-year         = floor(dayIndex / 48) + 1
-dayOfYear    = dayIndex % 48                       0..47
-seasonIndex  = floor(dayOfYear / 12)               0 spring, 1 summer, 2 autumn, 3 winter
-dayOfSeason  = dayOfYear % 12 + 1                  1..12
+dayIndex = floor(tick / 240)       year = floor(dayIndex / 48) + 1
+dayOfYear = dayIndex % 48          seasonIndex = floor(dayOfYear / 12)   (0 spring … 3 winter)
+dayOfSeason = dayOfYear % 12 + 1   isSeasonStart(tick) = tick > 0 && tick % 2880 === 0
 ```
 
-`advanceTime` pushes `seasonStarted {season, year}` on a day start where
-`dayOfSeason === 1`, and additionally `yearStarted {year}` when
-`dayOfYear === 0`. Tick 0 emits neither (`worldCreated` covers it). The UI
-formats the date as `Spring 3, Year 1 · 14:42`.
+The UI shows:
 
-**Stages (M10b)** run at dawn, for each node in ascending tile order:
+- the clock: `Spring 3, Year 1 · 14:42`, with the absolute day in the
+  tooltip;
+- event-feed separators between events whose ticks straddle a season start;
+- season bands on the history charts.
+
+The existing late-night rule and `dayStarted` are unchanged.
+
+**M10b — Stage pass (dawn, ascending tiles):**
 
 ```
 ageDays = floor((tick − bornTick) / 240)
-stage   = seedling  if ageDays < SEEDLING_DAYS[kind]
-          young     if ageDays < MATURE_AT_DAYS[kind]
-          mature    if ageDays < floor(lifespanDays × OLD_AT_PERMILLE[kind] / 1000)
-          old       if ageDays < lifespanDays
-          → death   otherwise
+stage = seedling < SEEDLING_DAYS ≤ young < MATURE_AT ≤ mature < oldAt(lifespan) ≤ old < lifespan ≤ death
+oldAt(L) = floor(L × OLD_AT‰ / 1000)
 ```
 
-- **On a stage change:** set `max = STAGE_MAX[kind][stage]`. If `amount` is
-  above the new max, the excess goes to `ledger.<kind>Decayed`.
-- **Death:**
-  - Bush: its remaining berries are added to `foodDecayed`, the tile becomes
-    `null` and `deaths.berries` is incremented.
-  - Tree: it becomes a snag (`stage 'dead'`, `diedTick = tick`,
-    `max = amount`) and `deaths.wood` is incremented. A tree at 0 wood that
-    dies is removed immediately.
-- **Snag rot:** every `SNAG_ROT_DAYS` days after `diedTick`, remove 1 wood to
-  `woodDecayed`. At 0 the tile becomes `null`.
+- **Stage change:** set `max = STAGE_MAX[kind][stage]`. Any excess above the
+  new max goes to `<kind>Decayed`.
+- **Bush death:**
+  - Run the fallen-fruit roll (M10c; in M10b, berries simply decay).
+  - Add the remaining berries to `foodDecayed`.
+  - Set the tile to `null` and increment `deaths.berries`.
+- **Tree death:** if it holds wood, it becomes deadwood (`stage 'dead'`,
+  `diedTick = tick`, `max = amount`). Otherwise it is removed. Increment
+  `deaths.wood`.
+- **Deadwood rot:** when `(tick − diedTick) / 240` is a positive multiple of
+  `SNAG_ROT_DAYS`, remove 1 wood to `woodDecayed`. At 0 the tile becomes
+  `null`. Chopping deadwood works like chopping a tree, but it never
+  regrows.
+- **Regrowth (every tick):**
+  - full rate: `tick % INTERVAL === 0`;
+  - half rate: `tick % (2·INTERVAL) === 0`;
+  - seedlings, old trees and deadwood: none;
+  - young plants and old bushes: half.
+- **Initial ages (new worlds):** assigned after `generateMap` with the
+  `#flora` stream, in ascending tiles. Every plant starts **mature with its
+  v0.1 amount**, and ages are spread uniformly over the mature window.
 
-**Regrowth (every tick)** keeps the stateless modulo timing:
+**M10c — Seed pass (dawn, after the stage pass; berries, then wood; ascending tiles):**
 
 ```
-full rate: tick % INTERVAL[kind] === 0
-half rate: tick % (2 × INTERVAL[kind]) === 0
-rate by stage: seedling none · young half · mature full · old half (berries) / none (trees) · dead none
+eligible: stage ∈ {mature, old} and amount ≥ SEED_MIN_UNITS[kind]
+chance‰ = SEED_CHANCE‰[kind] × SEASON_GERMINATION‰[season] / 1000  (old: ÷ 2, floored)
+draw r = nextInt(eco, 0, 999); if r ≥ chance‰: next plant
+seedsCast++; dx = nextInt(eco, −R, R); dy = nextInt(eco, −R, R); (0,0) ⇒ discard
+tryGerminate(kind, target)
 ```
 
-Each eligible node below `max` gains +1, recorded in `foodRegrown`/`woodRegrown`
-exactly as today.
+`tryGerminate(kind, t)` is shared by seeds and fallen fruit:
 
-**Seed casting (M10c)** runs at dawn after the stage pass, as a berries pass
-then a wood pass, in ascending tile order:
+- **Reject** if any of these hold:
+  - `t` is out of bounds or `resources[t] ≠ null`;
+  - suitability is 0;
+  - `t` is a structure tile or planned site;
+  - `t` is within Manhattan distance `SETTLED_CLEARING` of any structure;
+  - crowding exceeds `CROWD_MAX`;
+  - the kind's population is at or above the safety cap.
+- Otherwise draw `nextInt(eco, 0, 99)`. If it is below the suitability,
+  create a seedling `{amount 0, max 0, bornTick: tick, lifespanDays:
+  nextInt(eco, LIFE_MIN, LIFE_MAX), diedTick null}`, increment
+  `births[kind]` and `map.version`.
 
-```
-eligible if stage ∈ {mature, old} and amount ≥ SEED_MIN_UNITS[kind]
-chance‰  = SEED_CHANCE‰[kind] × SEASON_GERMINATION‰[season] / 1000   (old: × 1/2)
-if nextInt(eco, 0, 999) < chance‰:
-    seedsCast++
-    dx, dy = nextInt(eco, −R, R), nextInt(eco, −R, R)   (R = DISPERSAL_RADIUS[kind]); skip (0,0)
-    t = target tile; reject if out of bounds
-    reject unless: resources[t] === null
-                   suitability(kind, t) > 0
-                   not a structure tile / planned site
-                   Manhattan distance to every structure > SETTLED_CLEARING
-                   crowding(kind, t) ≤ CROWD_MAX[kind]
-                   population(kind) < SAFETY_CAP‰[kind] × landTiles / 1000
-    germinate if nextInt(eco, 0, 99) < suitability(kind, t):
-        resources[t] = {kind, amount: 0, max: 0, stage: 'seedling', bornTick: tick,
-                        lifespanDays: nextInt(eco, LIFE_MIN[kind], LIFE_MAX[kind]), diedTick: null}
-        births[kind]++; map.version++
-```
+Seedlings created this dawn count towards crowding for later attempts.
 
-The number of RNG draws per cast is fixed (chance, dx, dy; then suitability
-and lifespan only if the tile is valid). Snags count towards tree crowding.
-Seedlings created this dawn count towards crowding for later casts in the
-same dawn.
+**Fallen fruit (M10c, bush death):** for each berry still on a dying bush,
+up to `FALLEN_FRUIT_MAX_ROLLS`:
 
-**Suitability** (integer, 0–100; uses the terrain table in GDD §3.5):
+- If `nextInt(eco, 0, 999) < FALLEN_FRUIT‰`, call `tryGerminate` at a tile
+  picked by `nextInt(eco, −1, 1)` twice; (0,0) means the bush's own, now
+  empty, tile.
+- Each berry is counted in `foodDecayed` whether or not it sprouts. A
+  stripped bush therefore leaves no offspring.
 
-- berries: `base(terrain)`, with sand counting only when it is 4-adjacent to
-  grass. If 3 or more of the 8 neighbours hold trees (including snags), take
-  `× 40 / 100` (floored).
-- wood: `base(terrain)`; on grass, 40 if 2 or more of the 8 neighbours hold
-  trees, else 15.
+**Suitability (integer):**
 
-**Initial ages (M10b, new worlds)** are assigned after `generateMap`, in
-ascending tile order, using the `#flora` stream:
+- berries: `base`, where sand counts only when 4-adjacent to grass. If 3 or
+  more of the 8 neighbours hold trees or deadwood, take `× 40 / 100`.
+- wood: `base`; on grass, 40 if 2 or more of the 8 neighbours hold trees,
+  else 15.
 
-- `lifespanDays = nextInt(LIFE_MIN, LIFE_MAX)`
-- `ageDays = nextInt(MATURE_AT, floor(lifespan × OLD_AT / 1000) − 1)`
-- `bornTick = −ageDays × 240`
+### 7.2 Tunable parameters (`sim/constants.ts`)
 
-All initial plants start **mature with v0.1 amounts**, so day-1 balance is
-unchanged.
-
-**Seedling site claim:** when `chooseSite` evaluates a tile holding a
-seedling, the tile counts as free. Planning the site sets the tile to
-`null`; no units are involved.
-
-### 7.2 Tunable parameters (all in `sim/constants.ts`) and rationale
-
-| Constant | Berries | Wood | Rationale |
+| Constant | Berries | Pioneer tree | Rationale |
 |---|---|---|---|
-| `SEEDLING_DAYS` | 2 | 6 | Sprouts are visible for a few days at 10× (about 10–30 s). |
-| `MATURE_AT_DAYS` | 5 | 20 | Bushes are pioneers (forage recovers within a season); trees take more than a season. |
-| `OLD_AT_PERMILLE` | 800 | 750 | Visible old age before death; old trees are long-lived landmarks. |
-| `LIFE_MIN`/`LIFE_MAX` (days) | 28 / 44 | 90 / 150 | Bush mean 36 days (3 seasons); tree mean 120 days (2.5 years). Turnover of about 0.9/day each is visible but slow. |
-| `STAGE_MAX` young / mature / old | 3 / 6 / 4 | 4 / 8 / 8 | Mature equals v0.1 (`BERRY_MAX`, `TREE_WOOD_MAX`), so near-term balance is unchanged. |
-| Regrowth interval | 48 (unchanged) | 160 (unchanged) | Keeps M9's food balance: 32.2 regrown/day. |
-| `SEED_MIN_UNITS` | 3 | 4 | Stripped plants can't seed (the overharvest loop, GDD §3.9). |
-| `SEED_CHANCE‰` | 120 | 50 | See the equilibrium arithmetic in GDD §3.6. |
+| `SEEDLING_DAYS` | 2 | 6 | Sprouts are visible for about 10–30 s at 10×. |
+| `MATURE_AT_DAYS` | 5 | 20 | Bushes recover forage within a season; trees take longer. |
+| `OLD_AT‰` | 800 | 750 | Visible old age. |
+| `LIFE_MIN`/`LIFE_MAX` (days) | 28 / 44 | 90 / 150 | Pioneer turnover of about 0.9/day each, visible at 10× (GDD §3.3). |
+| `STAGE_MAX` y / m / o | 3 / 6 / 4 | 4 / 8 / 8 | Mature equals v0.1, so day-1 balance is unchanged. |
+| Regrowth interval | 48 | 160 | Unchanged from v0.1. |
+| `SEED_MIN_UNITS` | 3 | 4 | Stripped plants can't spread [approved]. |
+| `SEED_CHANCE‰` | 120 | 50 | Equilibrium arithmetic in GDD §3.6. |
 | `DISPERSAL_RADIUS` | 3 | 2 | Bushes hop; forests creep. |
-| `CROWD_MAX` (8-neighbourhood) | 2 | 5 | Patchy forage, dense but not solid forest. |
-| `SEASON_GERMINATION‰` sp/su/au/wi | 1500 / 1000 / 1000 / 0 | same | Spring flush, winter rest. Average 875‰ per year. |
-| `SNAG_ROT_DAYS` | — | 4 | A dead tree with 8 wood lingers about a month: visible and harvestable. |
-| `SETTLED_CLEARING` | 2 | 2 | Keeps camp, rest ring and doorways open. Shelter sites are at 3–6. |
-| `SAFETY_CAP‰` of land | 200 | 450 | A backstop that must never be hit in sweeps. |
-| `FORAGE_NEAR_CAMP_STEPS` | 10 | — | Dashboard pressure metric. |
+| `CROWD_MAX` (8-nbr) | 2 | 5 | Patchy forage, dense forest. |
+| `SEASON_GERMINATION‰` | 1500 / 1000 / 1000 / 0 | same | Spring flush, winter rest. |
+| `SNAG_ROT_DAYS` | — | 4 | 8-wood deadwood lingers about a month. |
+| `FALLEN_FRUIT‰`, `FALLEN_FRUIT_MAX_ROLLS` | 150, 6 | — | A neglected full bush gives on average ~0.9 sprout attempts at death. |
+| `SETTLED_CLEARING` | 2 | 2 | Camp, rest ring and doorways stay open. Sites are at 3–6. |
+| `SAFETY_CAP‰` of land | 200 | 450 | An enforced bound. Reaching it in sweeps is a tuning failure. |
+| `FORAGE_NEAR_CAMP_STEPS` | 10 | — | Pressure metric. |
 
-These are starting values. M10c tunes them against the §7.6 criteria using
-sweep evidence, and records any change with a one-line reason next to the
-constant, as M9 did.
+M10c and M10d tune these values against §7.6 using sweep evidence. Each
+change gets a one-line reason next to the constant.
 
-### 7.3 Data structures
+### 7.3 Modules
 
-As in §6.1, the M10 block. New modules:
-
-- `sim/calendar.ts`
+- `sim/calendar.ts` (M10a)
+- `sim/ecology/flora.ts` (stage tables, initial ages, hash)
+- `sim/ecology/habitat.ts` (suitability, crowding)
 - `sim/systems/ecology.ts` (replaces `resources.ts`)
-- `sim/ecology/habitat.ts` (suitability and crowding, pure)
-- `sim/ecology/flora.ts` (stage tables, initial ages, hashing)
-- `selectors.ecologySummary`
-- UI: `Dashboard` ecology card, an `HistoryCharts` "Ecology" chart, and
-  `format/text.ts` date formatting
-- Render: stage textures in `ResourceSprites`
+- `selectors.ecologySummary` and `nearestRipeBushSteps`
+- UI: calendar formatting, feed separators, chart bands, ecology card and
+  chart
+- Render: stage textures
 
 ### 7.4 Test plan
 
-| Layer | Tests (Vitest, co-located unless cross-cutting) |
+| Area | Tests |
 |---|---|
-| Calendar | Year, season and day boundaries at ticks 0, 239, 240, 2879, 2880, 11519, 11520. Events are emitted once per boundary and never at tick 0. Formatting includes late night across a season boundary. |
-| Stages | Each threshold transition per kind. `max` follows the stage. Excess on a cap drop goes to decay. Bush death removes it and decays its fruit. Tree death makes a snag. Snag rot timing; snag removal at 0. A 0-wood tree dying is removed directly. |
-| Regrowth | Half and full rates by stage. Seedlings and old trees never regrow. The ledger counts equal the units added. |
-| Dispersal | Each rejection rule in isolation (bounds, occupied, suitability 0, structure, planned site, clearing, crowding, cap). Seasonal multiplier (no winter germination). Fixed RNG draw count. Same-dawn crowding order. |
-| Habitat | Table values; sand-next-to-grass; shade on bushes; forest-edge trees on grass. |
-| Construction | A seedling tile can be chosen and is cleared. Germination never lands within the clearing. Housing is still completed in a controlled scenario with dense forest around camp. |
-| AI | Seedlings are never targeted. Snags are chopped. A forager whose bush dies mid-trip re-decides with no error. |
-| Conservation | Extended identity checked **every tick** over 100 days on several seeds, including dawn ticks with deaths and rot. |
-| Determinism | Same seed ⇒ identical `serialize()` after 60 days. Save at a dawn tick, resume, compare. The ecology stream doesn't perturb the AI stream: with germination disabled via a test sandbox constant, the AI RNG trace matches. |
-| Seed stability | The tick-0 terrain and resource kinds/amounts hash equal to the v0.1 values for 5 pinned seeds. |
-| Migration | `m9-save-v5.json` → v6: staggered ages (no dawn kills more than 10%); counters 0; continues 30 days with conservation; round-trips. Older fixtures load. Validation rejects each malformed new field. |
-| Architecture | `calendar.ts` and `ecology/` contain no forbidden imports or globals (the existing test covers new files automatically). |
-| Performance | Ecology ≤ 0.03 ms/tick average; dawn tick ≤ 1 ms; `step` ≤ 0.25 ms with 12 citizens (soft, as now). |
-| UI/format | Date strings; ecology card numbers from the selector; history chart handles missing ecology fields (a gap, not zero). |
-| Render (logic) | Level keys for every stage and fill level; `sync` adds and removes sprites on germination and death. |
-| Browser | Extend the 14-point check: sprouts appear and old trees become snags at 10×; the ecology card updates; the season shows in the clock. 30-minute soak at 10× with heap and DOM flat. |
+| Calendar (M10a) | Boundaries at ticks 0, 239, 240, 2879, 2880, 11519, 11520. `isSeasonStart` is never true at 0. Formatting, including late night across a season boundary. Feed separator placement (UI test). **D1 golden parity.** |
+| Stages | Every transition per kind; caps and decay on cap drop; bush death; tree → deadwood; 0-wood tree removal; rot timing; chopped deadwood never regrows. |
+| Regrowth | Rates by stage; ledger equals units added. |
+| Dispersal | Each rejection rule in isolation; seasonal multiplier (no winter germination); fixed draw counts; same-dawn crowding order; safety cap enforced. |
+| Fallen fruit | A stripped bush leaves no sprouts. A full bush can. Berries count as decayed either way. All germination rules apply. |
+| Habitat | Table values, sand rule, shade, forest edge. |
+| Construction | A seedling tile can be chosen and is cleared. No germination inside the clearing. Dense-forest scenario still houses everyone. |
+| AI | Seedlings never targeted; deadwood chopped; a plant vanishing mid-trip or mid-gather ends the task cleanly. |
+| **Collapse and recovery (controlled, deterministic)** | (1) An isolated patch of 4 bushes harvested daily by a scripted sandbox loop: none seed, and the patch dies within one lifetime. (2) The same patch with an unharvested bush ring within radius 3: once harvesting stops, the patch zone holds ≥ 2 fruiting bushes again within 20 days. (3) A neglected dying patch re-sprouts via fallen fruit. These test that the **mechanisms** work. |
+| Conservation | Extended identity checked every tick over 120 days on several seeds, and over the migration fixture. |
+| Determinism | D2–D7 (§6.4). |
+| Migration | v5 fixture → v6: staggered ages (H6); `nextEventId`; counters; 30 days with conservation; round-trip; every malformed field rejected; older fixtures load. |
+| Architecture | New sim files pass the existing forbidden-import and global checks (the test walks `src/sim` recursively). |
+| Performance | Ecology ≤ 0.03 ms/tick average, dawn ≤ 1 ms, `step` ≤ 0.25 ms. |
+| UI / render logic | Ecology card from the selector; charts show gaps for absent fields; level keys for every stage; `sync` on appear and vanish. |
+| Browser | 14-point check plus: sprouts and deadwood at 10×, ecology card, season clock and separators. 30-minute soak at 10×. |
 
-### 7.5 Sweep additions (`npm run sweep`)
+### 7.5 Sweep additions
 
-- **30 seeds × 120 days** (2.5 years). This replaces the 30-day pass, which
-  stays as a quick option.
-- **3 × 400 days** (8.3 years) for equilibrium, with save/resume checked at
-  day 400.
-- New per-seed figures: plant counts by kind and stage at day 1, 60 and 120;
-  births and deaths; worst single-dawn death share; peak-to-trough
-  oscillation; `forageNearCamp` minimum; the safety cap hit flag; and food
-  regrown per day.
-- Estimated runtime: about 30×120×240×0.2 ms ≈ 175 s plus 3×400×240×0.2 ms
-  ≈ 58 s, so under 5 minutes, close to today's 346 s.
+- **30 seeds × 120 days** (2.5 years). The 30-day pass is kept as a quick
+  option.
+- **3 × 400 days**, with save/resume at day 400.
+- Per-seed report:
+  - plant counts by stage at days 1, 60 and 120;
+  - births, deaths and fallen-fruit sprouts;
+  - worst single-dawn death share;
+  - safety-cap hits;
+  - forage-poor episodes (count, durations);
+  - O1 trip distance per 10 days, O2 new-plant food share, O3 deadwood wood
+    share;
+  - deaths with their cause and the forage state when they happened.
+- Estimated runtime: under 5 minutes.
 
-### 7.6 Multi-seed acceptance criteria (M10 ships only if all hold)
+### 7.6 Acceptance: hard gates against balance targets
 
-Survival and village (no regression from v0.1):
+**Hard gates are correctness.** They must hold on **every seed, every tick,
+every run**; any failure is a bug that blocks the milestone. **Balance
+targets are tuning goals under normal conditions** (default constants, the
+standard sweep). Missing one triggers tuning, or an explicit written
+justification approved in review. Outcomes that follow the rules, such as
+scarcity, local collapse or a rare death, are not bugs.
 
-1. 0 deaths across 30 seeds × 120 days and 3 × 400 days.
-2. Worst satiety ≥ 20 (M9: 26.4) and worst energy ≥ 20.
-3. 30/30 seeds fully housed, median day ≤ 3; 0 abandoned sites.
-4. Food regrown per village per day averaged over days 1–120 within ±25% of
-   32.2.
+**Hard gates:**
 
-Ecology works and is observable:
+| # | Gate |
+|---|---|
+| H1 | Determinism: D1 (M10a) and D2–D4; save/resume exact at days 120 and 400. |
+| H2 | Conservation identity every tick, in every sweep run and the migration fixture. |
+| H3 | Bounds and invariants every tick: `0 ≤ amount ≤ max ≤ stage cap`; stage consistent with age; `dead` only for wood with `diedTick` set; no plant on water or rock, a structure, a planned site or inside the clearing; plant counts never above the safety cap; all M9 invariants. |
+| H4 | Germination never blocks housing: no rejected site because of a seedling (tested), and site selection behaviour is unchanged where no seedlings are present. |
+| H5 | Seed stability: D6 tick-0 hashes. |
+| H6 | Migration and initial ages: all fixtures load; for the age distribution alone, scheduled deaths on any dawn in the first 60 days are ≤ 10% of either kind. |
+| H7 | No rescue: the D5 metamorphic test, and the ecology module reads no citizen, stockpile or structure-demand state (except structure tiles, for the clearing). |
+| H8 | Recovery mechanisms work: the controlled collapse-and-recovery tests in §7.4. |
+| H9 | Simulation safety: no exceptions; a damaged or out-of-range save is rejected; unchanged sweep invariants; performance budgets in §7.9. |
 
-5. Every seed has births > 0 **and** deaths > 0 of **both** kinds by day 60.
-6. Day-120 counts within bands of their day-1 counts: trees 70–140% and bushes
-   60–160%, on **every** seed.
-7. In 400-day runs, over days 200–400, each kind stays within ±30% of its
-   mean (bounded oscillation), with no extinction.
-8. No single dawn kills more than 10% of either kind (no synchronous
-   die-off).
-9. The safety cap is never hit.
-10. `forageNearCamp` never stays at 0 for more than 3 consecutive days on any
-    seed (no camp starvation zone).
+**Balance targets** (normal conditions; aggregated over the standard sweep):
 
-Integrity:
-
-11. Conservation every tick; invariants as in M9; determinism and save/resume
-    are exact at day 120 and day 400.
-
-Performance:
-
-12. Performance as in §7.9.
+| # | Target | Review threshold (below it, tune before shipping) |
+|---|---|---|
+| B1 | 0 deaths on 30/30 seeds × 120 days and in 3/3 × 400 days | ≥ 27/30 seeds with 0 deaths; no village loses more than 2; every death in the report traced to a rule-following cause |
+| B2 | Worst satiety ≥ 20 on normal seeds | median-seed worst satiety ≥ 20 |
+| B3 | 30/30 fully housed, median day ≤ 3 (M9: day 2) | ≥ 29/30 |
+| B4 | Food regrown/day within ±25% of 32.2 | ±35% |
+| B5 | Births and deaths of both kinds by day 60 | ≥ 28/30 seeds |
+| B6 | Day-120 counts: trees 70–140%, bushes 60–160% of day 1 | ≥ 27/30 seeds in band; island-wide extinction of either kind on 0 seeds |
+| B7 | Days 200–400: each kind within ±30% of its mean | ±40% |
+| B8 | Forage-poor episodes (`forageNearCamp` = 0) allowed; median episode ≤ 12 days and ≥ 90% recover within 24 days | median ≤ 24 days; any episode > 48 days investigated |
+| B9 | The safety cap is never reached | reached on ≤ 1 seed |
+| B10 | Observable outcomes: O1 trip distance rises in a forage-poor episode; O2 new-plant share ≥ 30% by day 120; O3 deadwood share ≥ 10% | each visible on ≥ 25/30 seeds |
 
 ### 7.7 Player-visible changes
 
-- **Clock:** `Spring 3, Year 1 · 14:42`. The tooltip shows the absolute day
-  and explains the season. Season and year events appear in the feed under
-  the Time filter.
+- **Clock:** `Spring 3, Year 1 · 14:42`. Season separators in the feed;
+  season bands in the charts.
 - **Map:**
-  - Tiny sprouts appear around mature plants, mostly in spring.
-  - Young plants are smaller.
-  - Old trees have a muted canopy.
-  - Dead trees stand as grey snags that shrink as they rot and as builders
-    chop them.
-  - Bushes drift away from heavily foraged areas over seasons, and forest
-    edges creep onto grass.
-- **Dashboard ecology card:** bushes, trees, seedlings and snags, each with
-  births and deaths over the last 10 days; standing food and wood; and
-  "Forage near camp".
-- **History:** a new *Ecology* chart (bushes and trees) and a *Standing food*
-  line.
-- **README:** a "Living land" section and the replay note in GDD §2.7.
-- **Unchanged:** controls, speeds, saving, citizen behaviour and inspector.
+  - Sprouts, mostly in spring.
+  - Smaller young plants and muted old ones.
+  - Grey deadwood that shrinks as it rots and as builders chop it.
+  - Forage moving away from heavily used areas, and forest edges creeping.
+- **Dashboard ecology card:**
+  - bushes, trees, seedlings and deadwood, with 10-day births and deaths;
+  - standing food and wood;
+  - **forage near camp**;
+  - **nearest ripe bush (steps)**.
+- **History:** an *Ecology* chart and a *Standing food* line.
+- **README:** a "Living land" section and the cross-version note.
 
 ### 7.8 Save migration requirements
 
-- Schema **v5 → v6** as in §6.5, with `SCHEMA_VERSION = 6`.
-- The SaveFile `fileVersion` is unchanged: the envelope shape doesn't change.
-- A v6 save in a v0.1 build is refused with the existing "newer version"
-  message, which is already tested.
-- Size: about 30 bytes × 4 fields × 130 nodes, roughly 16 KB raw. Target:
-  ≤ 125 KB at day 30 and ≤ 175 KB at day 100.
-- The autosave slot migrates on load like any slot. There is no background
-  rewrite of stored saves.
+- Schema v5 → v6 as in §6.5 (M10b). M10a keeps v5.
+- The SaveFile `fileVersion` is unchanged. A v6 save in v0.1 is refused with
+  the existing message.
+- Size: ≤ 125 KB at day 30 and ≤ 175 KB at day 100.
+- The autosave migrates on load like any slot. Stored saves are never
+  rewritten in the background.
 
-### 7.9 Performance targets (M10)
+### 7.9 Performance targets (hard gates, H9)
 
-| Metric | Target | M9 baseline |
+| Metric | Target | M9 |
 |---|---|---|
-| `step()` average, 12 citizens (sweep) | ≤ 0.25 ms | 0.145 ms |
-| Dawn tick worst case | ≤ 2 ms | — |
-| Ecology share of tick time | ≤ 0.03 ms average | — |
-| Save @ 30 / 100 days | ≤ 125 / ≤ 175 KB | 105 / 155 KB |
-| Browser 1× frame (headless, software GPU) | ≤ 16.7 ms median | 16.7 ms |
-| Browser 10× frame | median ≤ 33.4 ms | 33.3 ms |
-| 30-minute 10× soak | heap after GC flat (±1 MB), DOM flat after the caps fill, 0 errors | 9.6–10.4 MB, flat |
+| `step()` avg, 12 citizens | ≤ 0.25 ms | 0.145 ms |
+| Dawn tick, worst | ≤ 2 ms | — |
+| Ecology average share | ≤ 0.03 ms/tick | — |
+| Save @ 30 / 100 days | ≤ 125 / 175 KB | 105 / 155 KB |
+| Browser 1× / 10× median frame (headless software GPU) | ≤ 16.7 / ≤ 33.4 ms | 16.7 / 33.3 ms |
+| 30-min 10× soak | post-GC heap flat ±1 MB; DOM flat after caps; 0 errors | 9.6–10.4 MB |
 
 ### 7.10 Risks and edge cases
 
-- **Plant dies while targeted:** a forager walking to a bush that dies at
-  dawn arrives to `null`, and the existing guard ends the task. A builder's
-  reserved tile is the same. Test it.
-- **Plant dies while being harvested:** dawn runs in slot 3, before `act`.
-  The gather guard sees `null` or `amount 0` and ends the task, with no unit
-  created or lost. Conservation holds.
-- **Germination under a citizen:** allowed, since plants are not solid. The
-  citizen simply stands on a sprout.
-- **Germination on the campfire tile, a shelter, a site or a work tile:**
-  prevented by the clearing rule. Work tiles are inside the clearing because
-  they are adjacent to structures.
-- **Seedling on a tile chosen as a site in the same tick:** construction
-  (slot 5) runs after ecology (slot 3). `chooseSite` clears the seedling, so
-  this is deterministic.
-- **Undiscovered growth:** a forest grows in the fog. When it is revealed,
-  sprites appear at full brightness. The renderer already dims under fog.
-  Discovering a tile never changes ecology.
-- **Very small islands or odd seeds** (21 bushes, the minimum): bands are
-  relative, and `MIN_START_BERRY_TILES` still applies at creation. The
-  sweep's worst seed decides tuning.
-- **Old saves near a season boundary:** dates are derived, so the first
-  `seasonStarted` after load fires at the next boundary. No back-filled
+- **A plant vanishes under a forager or chopper:** the dawn pass runs before
+  `act`, and the existing guard ends the task. No unit is created or lost.
+- **Germination under a citizen:** allowed (plants aren't solid).
+- **Seedling chosen as a site in the same tick:** construction runs after
+  ecology and clears it, deterministically.
+- **Fog:** plants grow unseen. The renderer dims under fog, and discovering a
+  tile never changes the ecology.
+- **Small islands** (21 bushes): bands are relative, and the creation
+  minimums still apply.
+- **Migrated plants entering old age immediately:** the cap drops and the
+  excess decays at the first dawn, recorded in the ledger.
+- **Saves loaded near a season boundary:** dates are derived, and separators
+  appear from the next boundary. Nothing is back-filled.
+- **Event IDs after v6:** separate counter. Verify that no UI code mixes
+  event and memory IDs in one keyed list.
+- **History compatibility:** absent ecology fields render as gaps.
+- **Feed flooding:** no per-plant events. Calendar separators are not
   events.
-- **Migrated plants:** with ages over the mature window, a few may enter old
-  age immediately. Their max (bush 4) can drop below `amount`; the excess is
-  decayed at the first dawn and recorded in the ledger.
-- **Ledger overflow:** integers stay far below 2^53 over any realistic run.
-- **History compatibility:** samples without ecology fields render as gaps.
-  The chart's `null` handling is tested.
-- **Feed flooding:** no per-plant events. Only 1 season event every 12 days.
 
 ---
 
-### Review checklist (decisions needed before M10 starts)
+## Final M10 approval checklist
 
-1. Season length 12 days and year 48 days (§2.2 of the GDD), and the
-   "season-years" age wording.
-2. Trees become harvestable snags on death, rather than vanishing.
-3. Stripped plants can't seed (the overharvest loop), with the R2 fallback.
-4. Separate ecology RNG stream and the seed-stability guarantee for tick-0
-   maps.
-5. The M10a–d split and acceptance criteria §7.6 (especially bands 6–7).
-6. Natural death ships only together with births (M13).
+Approve each item, or mark it for change, before M10a starts:
+
+1. [ ] **Calendar:** 12-day seasons and 48-day years; the 240-tick day
+   unchanged; citizen age terms and thresholds deferred to the population
+   review.
+2. [ ] **M10a is UI-derived:** no sim events, state, IDs or schema change;
+   gated by the D1 golden byte-parity test against hashes recorded at the
+   current commit.
+3. [ ] **Separate event-ID counter** (`nextEventId`) introduced with schema
+   v6 in M10b. Ecology allocates no IDs.
+4. [ ] **Pioneer trees** (90–150 days) with harvestable deadwood. No species
+   field in M10; long-lived species deferred with a reserved migration path.
+5. [ ] **Stripped plants can't spread**, with the five natural recovery
+   mechanisms, including **fallen fruit** (M10c). No rescue mechanics,
+   enforced by the D5 and H7 tests.
+6. [ ] **Separate ecology RNG stream** plus a creation-only flora stream.
+   Tick-0 terrain and resources are unchanged for existing seeds (D6).
+7. [ ] **Schema v5 → v6 migration** with hash-staggered ages and a real v0.1
+   fixture.
+8. [ ] **Acceptance structure:** hard gates H1–H9 block shipping; balance
+   targets B1–B10, with review thresholds, guide tuning. Scarcity, local
+   collapse and rare rule-following deaths are permitted.
+9. [ ] **Observable outcomes O1–O4** measured in the sweep, and the
+   forage-near-camp and nearest-ripe-bush metrics on the dashboard.
+10. [ ] **Performance gates** (§7.9).
+11. [ ] **M10a → M10d sequencing**, each committed separately. M10e (the
+    Wonder prototype) is optional and approved separately after M10d.
+12. [ ] **M13 housing design** (headroom, overcrowding-as-demand, household
+    assignment) accepted as the direction; implementation is not part of
+    M10.
+
+---
+
+## Change log
+
+**Revision 2:**
+
+- **IDs:** investigated the shared ID allocator (§6.0, §6.4). M10a now adds
+  no sim events, so boundaries are UI-derived. Added `nextEventId` in v6 and
+  determinism tests D1–D7.
+- **Acceptance:** split into hard gates H1–H9 and balance targets B1–B10
+  with review thresholds. Zero deaths and forage near camp are now balance
+  targets.
+- **Ecology:**
+  - Pioneer trees, with `species` reserved.
+  - Fallen fruit and a shared `tryGerminate`.
+  - Controlled collapse-and-recovery tests.
+  - No-rescue metamorphic test.
+  - `nearestRipeBushSteps` metric.
+  - Sweep metrics for O1–O4.
+- **Data models:** households reserved for M13; R12 and R13 added.

@@ -1,15 +1,22 @@
 # Little Worlds — Living World Expansion
-## Game Design Document (preproduction draft for review)
+## Game Design Document (preproduction, revision 2)
 
-Status: **draft for review — nothing here is implemented.** The companion
-technical specification is [`LIVING_WORLD_TDS.md`](LIVING_WORLD_TDS.md); it
-holds data models, system order, budgets and the detailed M10 specification.
-The shipped v0.1 design remains [`../ARCHITECTURE.md`](../ARCHITECTURE.md).
+Status: **design for review — nothing here is implemented.** M10's direction
+and four-part structure are conditionally approved. This revision answers
+the first review (change log at the end). The companion technical
+specification is [`LIVING_WORLD_TDS.md`](LIVING_WORLD_TDS.md). The shipped
+v0.1 design is [`../ARCHITECTURE.md`](../ARCHITECTURE.md).
 
-Baseline numbers quoted here come from the v0.1 code and the M9 sweep
-(30 seeds × 30 days, 3 × 100 days): about 538 land tiles per island (312 grass,
-167 forest, 59 sand), 33 berry bushes (21–43) and 93 trees (76–99) at
-creation; villages gather 32.6 food/day and eat 24.1; 0 deaths.
+Baseline figures come from the v0.1 code and the M9 sweep (30 seeds × 30
+days, 3 × 100 days):
+
+- Islands have about 538 land tiles (312 grass, 167 forest, 59 sand).
+- 33 berry bushes (21–43) and 93 trees (76–99) at creation.
+- Villages gather 32.6 food/day, eat 24.1 and regrow 32.2; 0 deaths.
+
+**Decision status** used below:
+**[approved]** · **[proposed]** (needs approval before M10) ·
+**[deferred to review]** (not decided; belongs to a later design review).
 
 ---
 
@@ -20,144 +27,139 @@ creation; villages gather 32.6 food/day and eat 24.1; 0 deaths.
 > *You are something new on an island at the edge of the mist. Before you
 > can touch the world, you have to understand it.*
 
-The player is a **young, nameless presence** bound to one island, called the
-**Hollow** in this draft (all names are placeholders for review). The mist
-that surrounds the Hollow is the edge of the world. Twelve settlers wake on
-its shore with a single ember and no memory of how they came. They live
-entirely by themselves.
+The player is a young, nameless presence bound to one island (working name
+**the Hollow**; all names are placeholders). Twelve settlers wake on its
+shore with one ember and no memory of how they came. They live entirely by
+themselves.
 
-The fantasy has two acts:
+There are two acts:
 
-1. **The Witness.** You watch a civilization grow up from nothing. You learn
-   its people, its land and its history well enough to care about them.
-2. **The Hand.** Slowly, and at a cost, you gain the ability to intervene.
-   You do it in a world whose rules you have learned by watching. Your
-   interventions become part of the people's history and beliefs, so you have
-   to live with the consequences.
+1. **The Witness.** You watch a civilization and its land grow from nothing,
+   and learn them well enough to care.
+2. **The Hand.** Slowly and at a cost, you gain indirect influence in a
+   world whose rules you've learned by watching. Your acts become part of
+   its history and its people's beliefs.
 
-**Long-term vision.** Little Worlds becomes a hybrid of an *autonomous
-civilization simulator* and a *fantasy god-strategy game*. The civilization
-never needs the player to survive. The player's power is narrow, indirect and
-earned, and the most interesting thing on screen is always what the people do.
+**Long-term vision:** a hybrid of an *autonomous civilization simulator* and
+a *fantasy god-strategy game*. The civilization never needs the player to
+survive. Power is narrow, indirect and earned. The most interesting thing on
+screen is always what the people and the land do.
 
-**On inspiration.** The premise is inspired by the *Lost World* idea in
-*The Nebula's Civilization*: an isolated small world that develops while a
-nascent power watches over it. We take only that premise-level inspiration.
-Setting, names, characters, cosmology, powers and mechanics are original. As
-a review step, any term or mechanic that resembles the source will be renamed
-or redesigned.
+**Inspiration:** the premise is inspired by the *Lost World* idea in *The
+Nebula's Civilization* (an isolated small world developing under a nascent
+power's watch). Only that premise-level inspiration is taken. Setting,
+names, characters, cosmology, powers and mechanics are original. A review
+step renames anything that resembles the source.
 
 ### 1.2 Core gameplay loop
 
-**Witness phase (now through M14):**
+**Witness phase (M10–M14):**
+watch → notice a story, pressure or pattern → inspect (why is she walking so
+far for berries? why is the grove dying?) → record and anticipate (follow,
+bookmark, fast-forward, save) → watch.
 
-```
-watch ─► notice (a story, a pressure, a pattern)
-  ▲              │
-  │              ▼
-  │      inspect (why is she doing that? who are his parents?
-  │               why are the berries gone near camp?)
-  │              │
-  │              ▼
-  └──── record & anticipate (follow, bookmark, chronicle, fast-forward
-                             to see how it turns out; save the world)
-```
+The loop works because the simulation produces **legible causes**. The
+inspector already explains every citizen decision. From M10 the land has
+visible causes too (§3.11).
 
-The loop works because the simulation produces **legible causes**. Every
-behaviour can be explained by the inspector: needs, scores, memories,
-relationships and, from M10, the state of the land. The reward is
-understanding, plus the stories that come out of it.
-
-**Hand phase (post-M14):**
-
-```
-understand a pressure ─► spend scarce influence on an indirect nudge
-     ▲                                  │
-     │                                  ▼
-     └──── the world responds through its own rules; citizens remember
-           what happened and form beliefs about it (which change what
-           you can do next)
-```
+**Hand phase (after the prototype in §1.6 validates it):**
+understand a pressure → spend scarce influence on an indirect nudge → the
+world responds through its own rules → citizens remember what happened →
+their beliefs change what you can do next.
 
 ### 1.3 What makes Little Worlds different
 
 | Typical civilization / god games | Little Worlds |
 |---|---|
-| The player is the civilization's brain. | The civilization has its own brain. The player is an outsider with limited reach. |
-| Powers are available from the start. | Powers are **earned** and come after a long phase in which the world evolves on its own. |
-| Citizens are interchangeable workers. | Citizens are individuals: personality, needs, relationships, memories and (later) family lines. The inspector explains every decision. |
-| History is a log. | History is **emergent and personal**. It comes from real events, and citizens' memories refer to them. |
-| Worlds are effectively random. | Worlds are **deterministic**: a seed and a tick reproduce a history exactly, so histories can be replayed, compared and shared. |
-| The land is a static backdrop. | The land is **alive** (from M10): forests spread and age, forage moves, and the village shapes the ecology around it. |
+| The player is the civilization's brain. | The civilization has its own. The player is an outsider with limited reach. |
+| Powers from the start. | Powers are earned, after a long phase in which the world evolves alone. |
+| Citizens are interchangeable workers. | Individuals with personality, needs, relationships and memories; every decision is explained. |
+| History is a log. | History is emergent and personal; memories refer to real events. |
+| Random worlds. | Deterministic: seed + inputs reproduce a history exactly. |
+| Static land. | Living land: forage moves, groves age, and the village shapes its ecology and is shaped by it. |
 
 ### 1.4 The player before and after divine powers
 
-**Before (Witness, M10–M14).** The player has no ability to change the
-simulation. Their tools only affect how they observe:
-
-- Time control: play, pause, 1×/3×/10×, and later a fast "seasons pass" speed
-  (§2.4).
-- Inspection: citizens today, plus later tiles, families and buildings.
-- Following, bookmarks and a **chronicle** of notable events per year (§4.5).
-- Save, load, restart and seeds.
-
-This phase is not a tutorial to rush through. It is the point at which the
-player becomes attached to the world. Its success test is whether a player
-can tell a story about their world after an hour without being prompted.
-
-**After (Hand, post-M14).** The design constraints for later powers are set
-now so that M10–M14 don't block them:
-
-- **Indirect.** Powers act through the world's existing systems, never on a
-  citizen's mind. Examples: blessing a grove's growth (ecology), calling rain
-  (seasons), a sign in the sky (memories and belief).
-- **Scarce.** Powers spend an earned resource (working name **Wonder**). It
-  is accumulated from what citizens actually experience and believe, not from
-  a timer.
-- **Remembered.** Every intervention is a real event that witnesses
-  remember, so it becomes part of the history (rule 17).
-- **Deterministic and serializable.** A power is an input recorded at a
-  tick. Replaying a seed plus the recorded inputs reproduces the world.
-  Player inputs are the **only** non-seeded influence on the simulation (§6
-  of the TDS).
+- **Before (Witness):** the player has no influence on the simulation.
+  - Time controls.
+  - Inspection: citizens now; later tiles, families and buildings.
+  - Following, bookmarks, a chronicle, saves and seeds.
+  - This phase is where attachment forms. Its test is whether a player can
+    tell a story about their world after an hour.
+- **After (Hand):** these constraints are fixed now so that later work
+  doesn't block them:
+  - **Indirect:** powers act through the world's own systems, never on a
+    mind.
+  - **Scarce:** each costs an earned resource (working name **Wonder**).
+  - **Remembered:** witnesses form real memories (rule 17).
+  - **Deterministic:** each act is a recorded input at a tick. Inputs are
+    the only non-seeded influence on the world.
 
 ### 1.5 How emergent histories become meaningful
 
-A history matters when it has **continuity** (the same people and places
-recur), **causality** (you can see why things happened) and **stakes**
-(things can be lost). The expansion adds each in turn:
+A history matters when it has **continuity**, **causality** and **stakes**:
 
-- **Continuity:** families and genealogy (M12–M13), named places, buildings
-  that last, decay and are rebuilt (M14), and old trees that outlive people
-  (M10).
-- **Causality:** ecological pressure, such as overharvested berry bushes near
-  camp that stop spreading, pushes foraging further out. That visibly changes
-  routes, conversations and where houses are built. The inspector and
-  dashboard show these causes.
-- **Stakes:** natural death, ruins and abandoned homes. A grandmother's house
-  falls into ruin after she dies, and her grandson rebuilds on the site.
+- **Continuity:** families (M12–M13); buildings that last, decay and are
+  rebuilt (M14); named places. Long-lived trees that outlive people belong
+  to a later phase (§3.3). M10's pioneer trees live 2–3 world years.
+- **Causality:** overharvest thins forage near camp, routes lengthen, and new
+  patches become the village's larder (§3.11). Deadwood draws builders into
+  old groves.
+- **Stakes:** scarcity, local ecological collapse, later death and ruin.
 
-Principle: **no scripted story events.** Every story is a reading of real
-simulation state. The chronicle is a curated *view* of that state, not a
-generator.
+**No scripted story events and no rescue mechanics.** Every story is a
+reading of real state.
+
+### 1.6 Indirect-intervention prototype (cheap test of the god fantasy) [proposed]
+
+Before committing to M11–M14, test whether *indirect* influence is fun and
+legible. The prototype uses only systems that already exist after M10.
+
+- **What:** one power, **Scatter Seeds**.
+  - The player picks a discovered tile, and the world casts up to 6 berry
+    seeds within radius 2.
+  - Each seed goes through the normal germination rules (habitat, crowding,
+    clearing, safety cap). Nothing is forced.
+  - New plants start with 0 berries, so food still arrives only through
+    counted regrowth, days later. **No resources are created.**
+- **Cost:** 1 charge, regained at the start of each season (a prototype
+  stand-in for Wonder).
+- **Determinism:** each use is recorded as
+  `inputs: {tick, kind:'scatterSeeds', tile}[]` and applied at the start of
+  the next tick. Replay = seed + inputs.
+- **Memory:** citizens within the witness radius when the sprouts appear
+  gain a real `sawWonder` memory.
+- **Isolation:** it sits behind a URL flag (`?prototype=wonder`). Saving is
+  disabled while the flag is on, so no schema change is needed. Build it as
+  a throwaway branch or a flag that is removed afterwards.
+- **Questions it must answer** (5 or more playtesters; observe, don't
+  coach):
+  1. When forage near camp collapses, does the player think of intervening?
+  2. Within one in-game season, can they see a causal effect? Citizens
+     re-routing to the planted patch is shown by trip-distance and
+     new-plant share (§3.11).
+  3. Does the delay (days until fruit) feel meaningful or frustrating?
+  4. Does scarcity of charges create interesting choices?
+- **Keep / kill criteria:**
+  - **Keep:** at least 4 of 5 testers notice the effect without
+    explanation, and at least 3 of 5 report wanting more powers.
+  - **Kill or redesign:** testers can't tell their action mattered.
+- **Timing:** after M10d, as optional **M10e**, a timebox of a few days. It
+  is not part of the M10 approval.
 
 ---
 
 ## 2. World calendar
 
-### 2.1 Existing model (unchanged)
+### 2.1 Existing model (unchanged) [approved]
 
-- 1 tick = 6 in-game minutes; **240 ticks = 1 day**. Tick 0 = day 1, 06:00.
-  `step` increments `tick` first, and day N starts at tick `(N−1)·240`.
-- Phases are fixed: dawn 06:00, day 08:00, dusk 20:00, night 23:00–06:00.
-- Needs are tuned per tick against this day. For example, satiety falls 48 per
-  day (about 2 food per citizen) and a 70-tick night refills energy at home.
+- 1 tick = 6 minutes and 240 ticks = 1 day. Tick 0 = day 1, 06:00. `step`
+  increments `tick` first.
+- Night runs 23:00–06:00. Needs are tuned per tick against this day.
 
-**Decision: the day model does not change.** Every need, path cost and
-balance number is tuned per tick. Seasons and years are built *on top of*
-days, so no existing save needs a tick conversion.
+**The 240-tick day does not change.**
 
-### 2.2 Proposed seasons and years
+### 2.2 Seasons and years [approved for M10]
 
 | Unit | Length | Ticks | At 1× | At 10× |
 |---|---|---|---|---|
@@ -165,417 +167,457 @@ days, so no existing save needs a tick conversion.
 | Season | 12 days | 2,880 | 9.6 min | 58 s |
 | Year | 4 seasons = 48 days | 11,520 | 38 min | 3.8 min |
 
-- The seasons are Spring, Summer, Autumn and Winter. Day 1 is **Spring 1, Year
-  1**. Everything is derived from `tick` (no new stored state), so v0.1
-  saves get a calendar date for free.
-- **Why 12-day seasons:** a season has to be long enough for a food pressure
-  to build and be answered (at least 10 days of winter at about 24 food a day
-  is roughly 240 food, which matters against current stocks of about 200–400).
-  It also has to be short enough that a year passes in a few minutes at 10×.
-- Display: `Spring 3, Year 1 · 14:42`, with the absolute day number kept in
-  the tooltip and history axes. "Late night" stays as it is.
+- The seasons are Spring, Summer, Autumn and Winter. Day 1 is Spring 1,
+  Year 1.
+- Season and year are **pure functions of `tick`**. There is no new stored
+  state and no new sim events (§2.7; TDS §6.4).
+- They are displayed as `Spring 3, Year 1 · 14:42`.
 
-### 2.3 Aging and reproductive timescales (design only; M12–M13)
+### 2.3 Citizen aging and reproduction timescales [deferred to review]
 
-Ages are counted in **world years** (48 days). The numbers are chosen so that
-generations are visible in a session (§2.5), not to be realistic:
+Age terminology (the earlier "season-years" idea) and life-stage thresholds
+are **not decided**. They belong to the population design review before
+M12. Constraints that review must respect:
 
-| Life stage | Age (years) | Days | Notes |
-|---|---|---|---|
-| Child | 0–5 | 0–240 | No work. Follows a caregiver, eats from the stockpile and plays (social). |
-| Youth | 6–9 | 288–432 | Light gathering at reduced rates. Learns a role from parents and the village. |
-| Adult | 10–39 | 480–1,872 | Full roles. Eligible to partner and raise children from age 12. |
-| Elder | 40+ | 1,920+ | Slower walking and work, and more social. The natural-death hazard rises. |
-| Lifespan | ~45–60 | ~2,160–2,880 | Natural death is a per-year hazard, not a fixed date (TDS §4). |
+- Lifespans, stage ages and the generation interval must be consistent with
+  plant lifespans (§3.3) and with what can be observed within a session
+  (§2.5).
+- Any timescale must work with the 240-tick day and the needs balance.
+- The review must also decide whether citizen ages are shown in world years
+  (48 days) at all, or in another unit.
 
-- **Generation interval** is about 18 years (864 days), the typical age at
-  which a first child is born.
-- These stages are words for the player, mapped to numbers that suit the
-  existing needs balance. A 10-year-old adult reads strangely, so we display
-  **"season-years"** consistently and never mix in human-calendar language.
-  Choosing that label is a review item.
+### 2.4 Time acceleration (M11) [proposed]
 
-### 2.4 Time acceleration
+- Add a **30×** speed (150 ticks/s, about 2% CPU at 12 citizens).
+- Add a **"seasons pass"** mode: the sim runs as many ticks as fit in about
+  6 ms per frame, with interpolation off. It can optionally auto-pause on
+  chronicle events.
+- Both are needed before generations (M13) can be watched. Neither is part
+  of M10.
 
-Current speeds are 1×, 3× and 10× (5/15/50 ticks per second). The proposed
-additions are deferred to M11, not M10:
+### 2.5 Observing change within sessions
 
-| Speed | Ticks/s | Day | Year | Sim CPU at 12 citizens* | Rendering |
-|---|---|---|---|---|---|
-| 30× | 150 | 1.6 s | 77 s | ~2% | normal |
-| **Seasons pass** | budgeted (~6 ms/frame) | ~0.1–0.2 s | ~6–10 s | capped by budget | interpolation off, sprites only |
-
-\* Measured 0.145 ms/tick (M9 sweep). At 100 citizens the target is 1.5 ms
-per tick (TDS §6.3), so 30× costs about 22% of a core. **Seasons pass** is
-capped by time rather than ticks, so it degrades gracefully: it just runs
-fewer ticks per frame.
-
-"Seasons pass" pauses automatically on notable chronicle events if the
-player opts in, such as a death, a birth or a ruin. This is how a player
-watches generations without missing the story.
-
-### 2.5 Observing generations in a session
-
-| Goal | Ticks | At 10× | At 30× | Seasons pass (est. 3,000 ticks/s at 12, 600/s at 100) |
+| What | Ticks | At 10× | At 30× | Seasons pass (est.) |
 |---|---|---|---|---|
-| One year | 11,520 | 3.8 min | 1.3 min | ~4–19 s |
-| A tree's life (≈120 days) | 28,800 | 9.6 min | 3.2 min | ~10–48 s |
-| One generation (~18 yrs) | 207,360 | 69 min | 23 min | ~1.2–6 min |
-| A full life (~52 yrs) | ~600,000 | 3.3 h | 67 min | ~3.3–17 min |
+| A season | 2,880 | 58 s | 19 s | ~1–5 s |
+| A bush's life (~36 days) | 8,640 | 2.9 min | 58 s | ~3–15 s |
+| A pioneer tree's life (~120 days) | 28,800 | 9.6 min | 3.2 min | ~10–48 s |
+| One world year | 11,520 | 3.8 min | 1.3 min | ~4–19 s |
 
-So **forest turnover is visible at 10×** (M10's goal), and **generations
-need M11's acceleration**. That is why acceleration comes before births in
-the roadmap.
+M10's ecology is fully observable at today's 10×. The timescales for
+citizen generations wait for the population review (§2.3).
 
 ### 2.6 Implications for food, energy, sleep and survival
 
-- **M10:** seasons change **plant germination only** (spring flush, no
-  winter germination). Fruit yield, need decay and night length are
-  unchanged, so v0.1 survival balance is preserved. Ecological change works
-  on a scale of days, not hours, so citizens are never surprised by it.
-- **M11 (seasons that matter):**
-  - Berry fruiting becomes seasonal: summer 125%, spring and autumn 100%,
-    winter 25%.
-  - Citizens get a stockpile target that rises before winter, using a
-    utility *demand* term. This is the first real anticipatory behaviour.
-  - Stored food spoils slowly (recorded in the ledger as `foodSpoiled`), so
-    hoarding is limited.
-  - Acceptance: 0 starvation deaths across sweeps, including two winters.
-- **Night length stays fixed.** Seasonal day length would retune energy and
-  sleep for little gameplay gain. It is deferred indefinitely, and winter can
-  be shown with a visual tint (rule 15).
-- **Survival guardrail:** no seasonal mechanic may be enabled unless the
-  multi-seed sweep shows 0 starvation deaths. Hardship should show up as
-  longer trips, rationing and arguments, not as die-offs.
+- **M10:** seasons affect **germination only** (a spring flush, no winter
+  germination). Fruit yield, need decay and night length are unchanged.
+- **M11 [proposed]:** seasonal fruiting (summer more, winter much less), a
+  winter stockpile target in the AI, and slow food spoilage.
+- **Night length stays fixed**, deferred indefinitely. Winter can be shown
+  by a tint.
+- **Balance target:** hardship shows as longer trips, rationing and
+  arguments, not die-offs. Deaths under unusual conditions are allowed
+  outcomes (§3.10, TDS §7.6).
 
-### 2.7 Save compatibility and deterministic replay
+### 2.7 Save compatibility and deterministic replay [approved]
 
-- The calendar is a pure function of `tick`, so v0.1 (schema v5) saves load
-  with a correct date and no calendar migration.
-- **Replay guarantee (within a version):** seed + tick (+ recorded player
-  inputs, later) ⇒ an identical `serialize()`.
-- **Across versions:** a loaded save **resumes** deterministically under the
-  new rules. It does not reproduce what v0.1 would have done. Mechanics
-  change, so this is stated explicitly to users: "the same seed grows the
-  same island; the village's story depends on the version."
-- **Seed stability:** M10 must not change the **tick-0 map** for existing
-  seeds. New per-plant data is drawn from a separate derived RNG stream (TDS
-  §6.4).
+- Dates are derived from `tick`, so v0.1 (schema v5) saves get correct dates
+  without migration.
+- **M10a changes no simulation state at all.** Season and year boundaries
+  are presented by the UI (clock, event-feed separators, chart bands), not
+  stored as events.
+  - Adding events would draw from the shared ID counter. That shifts every
+    later citizen, structure, memory and event ID and pushes other events
+    out of the 200-event window.
+  - Behaviour would be unchanged (IDs only break ties and keep their
+    relative order), but saves would differ. Details are in TDS §6.4.
+- **Within a version**, seed + tick (+ inputs) ⇒ identical `serialize()`.
+- **Across versions**, a save **resumes** under the new rules; it doesn't
+  replay v0.1's future.
+- **Seed stability:** M10 keeps the tick-0 terrain and resource placement
+  for every existing seed. New per-plant data comes from separate derived
+  RNG streams.
 
 ---
 
 ## 3. Living ecology
 
-### 3.1 Concepts: regrowth versus reproduction
+### 3.1 Regrowth versus reproduction [approved]
 
-Today a plant is an immortal node that **regrows** units (berries, wood) on a
-fixed schedule. The expansion separates these:
-
-- **Regrowth (production):** an existing plant produces units. Its rate and
-  cap depend on its **life stage**.
-- **Reproduction (population):** mature plants **cast seeds**. A seed
-  becomes a new plant only on a suitable, uncrowded tile. Plants **age** and
-  **die**.
-
-The forest and the forage therefore become *populations* with births,
-deaths, an age structure and a carrying capacity. Village behaviour feeds
-back into them: **a plant that is stripped bare cannot seed**. This is the
-central meaningful loop (§3.9).
+- **Regrowth (production):** a living plant produces units (berries, wood)
+  at a rate and cap set by its life stage. Every unit is counted in the
+  ledger.
+- **Reproduction (population):** mature plants cast seeds. A seed becomes a
+  plant only on a suitable, uncrowded tile. Plants age and die.
+- New plants start with **0 units**. Resources enter the world **only**
+  through counted regrowth, never by spawning.
 
 ### 3.2 Berry bush lifecycle
 
-| Stage | Age | Max berries | Fruiting rate | Seeds? |
+| Stage | Age | Max berries | Fruiting | Seeds |
 |---|---|---|---|---|
 | Seedling | 0–2 days | 0 | — | no |
-| Young | 2–5 days | 3 | half | no |
-| Mature | 5 days to 80% of lifespan | 6 (as today) | full (1 per 48 ticks) | yes, if holding ≥ 3 berries at dawn |
-| Old | last 20% of lifespan | 4 | half | yes (half chance) |
-| — | death at lifespan (28–44 days) | removed; any berries left on it decay (ledger) | | |
+| Young | 2–5 days | 3 | half rate | no |
+| Mature | 5 days to 80% of life | 6 (as today) | full (1 per 48 ticks) | if holding ≥ 3 berries at dawn |
+| Old | last 20% | 4 | half | half chance |
+| Death | at 28–44 days | removed; remaining berries decay (ledger) and may fall as seed (§3.10) | | |
 
-Bushes are short-lived, fast-spreading pioneers, so forage *moves* over a
-season.
+### 3.3 Trees: M10 has pioneer trees only [proposed]
 
-### 3.3 Tree lifecycle
+**Inconsistency resolved.** The first draft gave trees 90–150 days (about
+2–3 world years) while claiming that trees outlive generations. Both can't
+be true. Revised design:
 
-| Stage | Age | Max wood | Growth rate | Seeds? |
+- **M10's trees are pioneer trees:** fast-growing, short-lived woodland, the
+  kind that colonises clearings and forest edges. This is all of v0.1's 93
+  starting trees.
+  - A lifespan of 90–150 days (about 2–3 world years) is deliberate: forest
+    turnover is visible at 10× within a session (about 10 minutes per tree
+    life).
+  - The GDD no longer claims any M10 tree outlives people.
+- **Long-lived trees are deferred** (proposed for after M13, alongside the
+  population timescales). Examples would be an "elder tree" species with a
+  lifespan of many world years, slow growth and shade that suppresses
+  pioneers. They become the landmarks that outlive generations, once those
+  timescales are decided.
+- **M10 stays small:**
+  - There is no species field.
+  - Future species are added by a later migration that sets
+    `species: 'pioneer'` on every existing wood node.
+  - M10's per-kind tables become per-species tables then. TDS §6.1 reserves
+    the field name.
+
+| Stage (pioneer tree) | Age | Max wood | Growth | Seeds |
 |---|---|---|---|---|
 | Seedling | 0–6 days | 0 | — | no |
-| Young | 6–20 days | 4 | half | no |
-| Mature | 20 days to 75% of lifespan | 8 (as today) | full (1 per 160 ticks) | yes, if holding ≥ 4 wood at dawn |
-| Old | last 25% | 8 | none (no new wood) | yes |
-| Dead (snag) | after lifespan (90–150 days) | the wood it holds | none; rots 1 unit every 4 days (ledger) | no |
+| Young | 6–20 days | 4 | half rate | no |
+| Mature | 20 days to 75% of life | 8 (as today) | full (1 per 160 ticks) | if holding ≥ 4 wood at dawn |
+| Old | last 25% | 8 | none | yes |
+| Dead — **harvestable deadwood** [approved] | after 90–150 days | the wood it holds | rots 1 unit / 4 days (ledger) | no |
 
-Dead trees remain as **harvestable deadwood**. That gives builders a reason
-to clear old groves and makes forest death visible without a sudden gap.
-Felling stays as it is: a tree chopped to 0 regrows (coppicing). Clearing a
-tile by felling is deferred (§8).
+Chopping is unchanged: a tree chopped to 0 regrows (coppicing). Felling to
+clear land is deferred.
 
 ### 3.4 Seed dispersal
 
-- Once per day at dawn, each seed-bearing plant rolls a seed chance. The
-  chance is lower for bushes and lower again for trees, and is scaled by
-  season.
-- A seed lands on a uniformly random tile within the dispersal radius (bushes
-  3, trees 2). Trees therefore creep outwards as fronts, while bushes hop.
-- It **germinates** only if the landing tile:
-  1. is in bounds, has non-zero **habitat suitability** for that kind, and
-     has no plant;
-  2. is not a structure tile or planned site, and is outside the **settled
-     clearing** (§3.7);
-  3. passes the **crowding** test (§3.6);
-  4. passes a suitability roll (a suitability of 60 gives a 60% chance).
-- A new plant starts as a seedling with **0 units**, so births never create
-  resources from nothing in a single step. Every unit still enters the world
-  through counted regrowth.
+- Once per day, at dawn, each seed-bearing plant rolls its seed chance,
+  scaled by season.
+- A seed lands on a random tile within radius 3 (bushes) or 2 (trees).
+- It germinates only if the tile:
+  1. is free and in bounds;
+  2. is suitable for that kind (suitability above 0);
+  3. is outside the settled clearing and not a structure or planned site;
+  4. passes the crowding limit;
+  5. is under the safety cap;
+  6. wins a roll against its suitability.
 
 ### 3.5 Habitat suitability (0–100)
 
-The base value comes from terrain; neighbourhood modifiers are computed only
-for candidate tiles.
-
-| Terrain | Berries | Trees |
+| Terrain | Berries | Pioneer trees |
 |---|---|---|
-| grass | 100 | 15, or 40 with ≥ 2 trees among its 8 neighbours (forest edge) |
+| grass | 100 | 15, or 40 at a forest edge (≥ 2 tree neighbours) |
 | forest | 30 (shade) | 100 |
-| sand | 15 if next to grass, else 0 | 0 |
+| sand | 15 if next to grass | 0 |
 | rock, water | 0 | 0 |
 
-- **Shade:** a bush candidate with 3 or more tree neighbours drops to 40% of
-  its suitability.
-- **Moisture is not stored** in the map (it exists only during generation).
-  Rather than adding a stored field, M10 uses terrain alone. Forest already
-  marks the wettest land. A stored moisture or fertility layer is deferred
-  until a mechanic needs it, such as soil exhaustion or blessings.
+Shade: a bush candidate with 3 or more tree neighbours drops to 40% of its
+suitability. Moisture and fertility layers are deferred until a mechanic
+reads them.
 
-### 3.6 Competition for space and carrying capacity
+### 3.6 Competition and carrying capacity
 
-- **One plant per tile** (as today). A plant never displaces another.
-- **Local crowding:** a tree may germinate only if it has 5 or fewer trees
-  among its 8 neighbours. A bush may germinate only if it has 2 or fewer
-  bushes among its 8 neighbours (bushes stay patchy).
-- **Carrying capacity emerges** from free suitable tiles, crowding and
-  lifespan. With *N* plants of lifespan *L* days, deaths run at about *N/L*
-  per day. Births fall as free suitable space fills.
+- One plant per tile, and plants never displace each other.
+- Crowding limits over the 8 neighbours: trees ≤ 5, bushes ≤ 2.
+- Carrying capacity emerges from free suitable tiles, crowding and lifespan:
   - Trees: about 93 trees with a mean life of 120 days give about 0.8
-    deaths/day. With roughly 70 seed-bearers at a 5% daily seed chance, 3.5
-    seeds/day need only about 23% success to replace them.
+    deaths/day. About 70 seed-bearers × 5% = 3.5 seeds/day need about 23%
+    success to replace them.
   - Bushes: about 33 bushes with a mean life of 36 days give about 0.9
-    deaths/day. With roughly 25 bearers at 12%, 3 seeds/day need about 30%
+    deaths/day. About 25 bearers × 12% = 3 seeds/day need about 30%
     success.
-- **Safety cap (backstop, not balance):** natural germination stops if trees
-  exceed 45% of land tiles or bushes exceed 20%. The sweep requires that
-  this cap is **never hit**. If it is, the tuning is wrong.
+- **Safety cap** (a hard bound, not tuning): trees ≤ 45% and bushes ≤ 20% of
+  land tiles. Hitting it in the default sweep is a tuning failure.
 
 ### 3.7 Spawning, disappearance and the settlement
 
-- **Appearance:** only by germination (§3.4).
-- **Disappearance:** a plant dies at the end of its lifespan. Bushes vanish
-  and trees become snags that rot away. Units lost this way are **decay** in
-  the ledger.
+- Plants appear only by germination and disappear only by natural death
+  (bushes vanish; trees become deadwood that rots or is chopped).
 - **Settled clearing:** no germination within Manhattan distance 2 of any
-  structure (campfire or shelter), and never on a planned site. This keeps
-  the camp, rest spots and doorways open.
-- **Site safety:** shelter site selection may claim a tile holding a
-  **seedling** (0 units, so nothing is lost). This means spreading growth can
-  never block housing. Shelter sites are 3–6 tiles from camp and the clearing
-  covers 2.
-- **Fog:** the ecology runs island-wide, including on undiscovered tiles. The
-  world evolves whether or not anyone is watching. Citizens still act only on
-  discovered, reachable tiles (rule 13).
+  structure, or on a planned site.
+- Shelter site selection may claim a seedling tile (it holds 0 units), so
+  growth never blocks housing.
+- The ecology runs island-wide, including in the fog. Citizens still act
+  only on discovered, reachable tiles.
 
-### 3.8 Conservation and ecological balance
+### 3.8 Conservation
 
-The ledger gains `foodDecayed` and `woodDecayed`. The conservation identity
-becomes:
+The ledger gains `foodDecayed` and `woodDecayed`. The identity is checked
+every tick:
 
 ```
-food on map + carried + stockpile.food + foodEaten + foodLost + foodDecayed
-  = initial food + foodRegrown
-wood on map + carried + stockpile.wood + held by structures + woodLost + woodDecayed
-  = initial wood + woodRegrown
+map + carried + stockpile + eaten + lost + decayed = initial + regrown      (food)
+map + carried + stockpile + held by structures + lost + decayed = initial + regrown   (wood)
 ```
 
-It is still checked on **every tick** in the conservation test and the sweep.
+### 3.9 Stripped plants cannot spread [approved]
 
-**Balance targets (multi-seed):** plant counts stay within a band around
-their starting values (TDS §7.6). Neither kind goes extinct or runs away.
-Food regrown per day stays within ±25% of v0.1's 32.2, and the village sees
-zero starvation.
+A bush needs at least 3 berries at dawn to seed, and a tree at least 4 wood.
+A bush picked bare every day therefore never reproduces. This is the
+pressure that makes the village's foraging shape its land.
 
-### 3.9 Why this ecology is gameplay, not decoration
+### 3.10 Ecological collapse and natural recovery [proposed]
 
-- **Overharvest feedback:** bushes near camp are picked bare, so they don't
-  seed. As they age out, near-camp forage thins and foragers walk further.
-  The dashboard metric *"forage within 10 steps of camp"* makes this visible.
-  It prepares for later decisions such as where to settle, abandonment (M14)
-  and blessings (Hand phase).
-- **Builder ecology:** deadwood in old groves is free wood, so builders work
-  forest edges and the treeline shifts.
-- **Long-lived landmarks:** a tree can outlive a citizen (later, several),
-  which gives places a history.
+**Principle.** The rules are the same whatever state the colony is in.
+**Nothing reads the village's need in order to help it:**
+
+- no spawning tied to hunger, stockpiles or population;
+- no minimum-resource guarantees after world creation;
+- no refills.
+
+Collapse is allowed when it follows from the rules, and recovery has to come
+from the rules as well.
+
+**How local collapse happens.** Foragers take the nearest bush with berries.
+Near-camp bushes are stripped daily, never seed, and age out over about one
+bush lifetime (≈ 36 days). A **forage-poor zone** forms around camp and
+trips get longer.
+
+**Why it is usually local and recoverable.** Demand is about 24 berries/day,
+while ≈ 33 mature bushes can regrow up to about 165/day. Only about 5
+heavily used bushes are needed to feed the village, so **most bushes go
+unharvested on any given day, keep their fruit and keep seeding.**
+
+**Natural recovery mechanisms** (all ordinary rules, applied everywhere):
+
+1. **Rest regrowth.** A stripped bush regains 5 berries a day. One day
+   without harvest takes it back to the 3-berry seeding threshold. Pressure
+   that moves elsewhere lets plants recover.
+2. **Recolonisation from the unharvested ring.** Bushes beyond the
+   foraging frontier seed inwards (radius 3; maturity in 5 days). Seedlings
+   that land in the forage-poor zone grow and fruit, so the zone keeps
+   being restocked even while the plants in it are harvested.
+3. **Fallen fruit.** When a bush dies still holding berries, each berry has
+   a small chance to germinate on its own or an adjacent tile, under all the
+   normal rules. The berry itself still leaves the world as decay, and the
+   new plant starts at 0. Neglected patches re-seed themselves; stripped
+   ones don't. That is consistent with §3.9.
+4. **Gap regeneration.** A dead or rotted tree frees space, which relaxes
+   crowding and shade for the seedlings around it.
+5. **Behavioural relief** (existing AI): foragers already choose the nearest
+   bush *with berries*. As a zone empties, pressure moves outwards to
+   bushes that can carry it.
+
+**What is allowed to happen.** Longer trips, a forage-poor camp zone lasting
+a season, a thin year after a harsh spring, and in rare seeds hunger or a
+death. These are balance outcomes to measure, not correctness failures
+(TDS §7.6). An island-wide loss of all bushes under default tuning would
+mean the tuning is wrong. It is a balance failure to fix, not something to
+patch with a rescue rule.
+
+### 3.11 Observable ecological outcomes (gameplay, not decoration) [proposed]
+
+Each outcome has a measurable signal, so the sweep can show that it happens
+and a player can see it.
+
+| # | Outcome | What the player sees | Measured by (sweep; dashboard where noted) |
+|---|---|---|---|
+| O1 | **Foraging routes change when local bushes disappear** | Foragers head further out, and the inspector shows longer "heading to" trips; the camp zone looks bare. | Mean BFS steps from camp to the bush chosen for foraging, per 10 days. Expected to rise as near-camp bushes die. Dashboard: "Nearest ripe bush: N steps". |
+| O2 | **A new berry patch becomes a useful food source** | Sprouts appear, fruit a few days later, and foragers start visiting them; the patch is named in the citizen's memories ("found berries at …"). | Share of berries gathered from bushes that germinated after day 1. Target: rises to ≥ 30% by day 120. |
+| O3 | **Forest aging and deadwood change wood gathering** | Grey deadwood appears in old groves; builders chop it, and the treeline shifts. | Share of wood chopped from deadwood (target ≥ 10% by day 120); mean distance of chop targets. |
+| O4 | **A forage-poor zone forms and recovers** | Bushes thin near camp during heavy use and return as seedlings from the outer ring mature. | Episodes where `forageNearCamp` = 0, with their durations; time to recovery. |
+
+### 3.12 Ecological balance targets
+
+Balance targets are listed in TDS §7.6, separated from hard correctness
+gates.
 
 ---
 
-## 4. Future population systems (design only; M12–M13)
+## 4. Future population systems (M12–M13; design only)
 
-These are **not part of M10**. The data shapes are fixed now so that M10's
-schema and systems don't need to be redone later.
+Timescales and terminology are deferred to the population review (§2.3).
+The structures and rules below don't depend on those numbers.
 
 ### 4.1 Aging and natural death
 
-- A citizen gets `bornTick`; age and life stage are derived from it (§2.3).
-- **Natural death:** once per world year, on each citizen's birthday tick,
-  roll a hazard from an integer table by age: 0 below 40 years, then rising
-  to 100% at 70. No `Math.exp` is used.
-- The death cause gains `'oldAge'`. A death is a real event, and witnesses
-  remember it (existing `sawDeath`).
-- **v0.1 migration:** the existing 12 citizens get deterministic adult ages
-  (16–30 years), derived from the seed and id, with no RNG draw from the main
-  stream.
+- Citizens get `bornTick`; age and stage are derived from it.
+- Natural death is an age hazard drawn from an integer table, rolled on
+  birthdays. There is a new cause, `oldAge`.
+- Natural death ships **only together with births** (M13), so worlds never
+  just dwindle.
 
-### 4.2 Births and children
+### 4.2 Partners, households, births and children
 
-- **Partners:** two adults with mutual affinity ≥ 60 and familiarity ≥ 50
-  may form a household bond. This is symmetric and stored on both. There is
-  no sex or gender mechanic: any pair can partner. Children are arrival
-  events gated by household conditions, not biology. This keeps the system
-  inclusive and simple.
-- **Birth gate (all required):** both partners are adults; the household has
-  a home with spare capacity; the stockpile is at least 2 days of food per
-  living citizen; the population is below the cap; and the household has had
-  no birth in the last year. A daily household check rolls a small chance.
-- **Children:** inherit a personality that blends the parents' traits plus a
-  seeded variation, rounded to `TRAIT_PRECISION`. They take a family name or
-  lineage tag, and a role is assigned at Youth from village demand.
-  - Children have needs, eat from the stockpile and do not work.
-  - They follow a caregiver at walking distance. This uses the existing path
-    and step rules, so there is no teleporting.
+- **Partners:** two adults with high mutual affinity and familiarity form a
+  bond. There is no sex or gender mechanic.
+- **Household:** partners and their dependent children form a household.
+  Single adults are households of one. A household is the unit that is
+  housed (§4.4).
+- **Birth gate:**
+  - adult partners;
+  - the household is housed (see §4.4 for overcrowding);
+  - food in the stockpile ≥ a days-per-capita threshold;
+  - population below the cap;
+  - a minimum interval since the household's last birth;
+  - then a small daily chance.
+- **Children:** a blended and varied personality; dependent (no work); they
+  follow a caregiver on real paths.
 
-### 4.3 Family relationships and genealogy
+### 4.3 Family and genealogy
 
-- Each citizen gets `parentIds: [number, number] | null`, `partnerId` and
-  `childIds`.
-- Kinship is **derived** (parent, sibling, grandparent and cousin are
-  computed from parent links) and never stored as relationships.
-- Relationships between kin start with familiarity and affinity bonuses, so
-  family feelings start from a real link.
+`parentIds`, `partnerId`, `childIds` and `householdId` are stored. Kinship
+(siblings, grandparents, cousins) is derived from them. Relationships
+between kin start with bonuses.
 
-### 4.4 Housing and food pressure
+### 4.4 Housing for a growing population: resolving the deadlock [proposed]
 
-- Housing demand counts households. The existing planner (§3.9 of
-  ARCHITECTURE) gains "plan when free capacity < 1 household".
-- When food per capita falls below a threshold, births stop. When it falls
-  further, the share action becomes more likely. Starvation stays a failure
-  state, and the guardrail in §2.6 applies.
+**The deadlock, verified in v0.1 code:**
+
+- `housingDeficit = living − shelters × 3` (`sim/structures.ts:76`).
+- The planner acts only when the deficit is above 0
+  (`sim/systems/construction.ts:35`).
+- 12 citizens therefore get exactly 4 shelters with no spare beds. If births
+  required spare housing, no birth could ever happen, so no deficit, and no
+  new home.
+- `assignHomes` also packs homeless citizens by id (`construction.ts:88`),
+  ignoring family.
+
+**Resolution (four parts; each alone breaks the deadlock, and together they
+make it robust):**
+
+1. **Proactive expansion (headroom).** The planner's target becomes
+   `capacity ≥ living + headroom`, where
+   `headroom = HOUSING_HEADROOM` (for example 3 beds, one shelter) when the
+   village is *prosperous*. Prosperous means stockpile food ≥ a days-per-
+   capita threshold and nobody homeless. Otherwise headroom is 0.
+   Builders build ahead in good times, which gives growth a place to go.
+2. **Births are gated on the household being housed, not on a free bed.**
+   A birth may make a home **overcrowded** by one child. Overcrowding counts
+   as housing demand (the deficit counts overcrowded beds), so a birth
+   always creates planner demand. A world can never be stuck with no birth
+   and no building.
+3. **Household-aware assignment.** Homes are assigned per household:
+   - Families take priority over single lodgers.
+   - When partners bond, they move into a home with room for both (one
+     partner's home if it has space, otherwise an empty shelter). Until
+     then they are a **waiting household**, which adds demand.
+   - Children live with a parent.
+   - When a family grows, a single lodger in the same shelter moves to a
+     free bed elsewhere first.
+   - Grown children who form their own household move out, creating new
+     demand.
+4. **Bounded growth.** The planner never targets more than
+   `MAX_POPULATION + headroom` beds, and it is limited by wood. Prosperity
+   ending turns headroom off. Abandonment and decay (M14) handle surplus
+   homes.
+
+**Deadlock-freedom argument:** births need only a housed household.
+Overcrowding and waiting households always raise demand. The planner always
+builds while demand exceeds capacity and wood is available. So there is no
+reachable state in which births are blocked only because no home exists and
+none will be built.
+
+**Tests (M13):**
+- A fully housed 12-citizen prosperous village builds a headroom shelter.
+- A birth in a full home creates demand that leads to a new shelter.
+- Partners move in together.
+- A lodger moves out for a growing family.
+- Sweep: no household waits more than one season. Headroom is never built
+  while food is scarce.
 
 ### 4.5 Compact historical records
 
-- **Archive of the dead:** a dead citizen's full record (memories,
-  relationships, scores) is compacted after 1 year into a
-  `PersonRecord` of about 80 bytes. It keeps id, name, born and died ticks,
-  cause, parents, partner, role and up to 3 "notable" event ids. The living
-  `citizens` array stops growing without bound.
-- **Chronicle:** per world year, a fixed-size `YearSummary` of about 120
-  bytes (population start/end, births, deaths, buildings built or ruined,
-  plant counts) plus up to 8 notable events, chosen by fixed salience rules.
-- Size budget: 100 years × (summary + 8 events), plus 500 archived people,
-  is under 100 KB.
+The dead are compacted after one year into a `PersonRecord` (about 80
+bytes). A per-year `YearSummary` (about 120 bytes) holds up to 8 notable
+events chosen by fixed salience rules. The budget is under 100 KB for 100
+years.
 
 ### 4.6 Population limits and performance
 
-- A hard cap of `MAX_POPULATION` (default 60 at first, raised as performance
-  work lands; 200 at most). A soft limit comes from housing and food.
-- Scaling risks are covered in TDS §6.3 and §6.7: per-decision BFS, the
-  O(n²) relationship table and save size. Relationships must be capped per
-  citizen before populations exceed about 30.
+`MAX_POPULATION` starts at 60 (200 at most). Relationships are capped per
+citizen before populations exceed about 30. The dead are archived. See TDS
+§6.3 and §6.7.
 
 ---
 
-## 5. Settlement evolution (design only; M14)
+## 5. Settlement evolution (M14; design only)
 
-### 5.1 Building condition
-
-- A structure gains `condition` (0–100), `builtTick` and `lastRepairTick`.
-- Decay per day: shelters lose 1, plus 1 if unoccupied, plus 1 in winter (from
-  M11). A shelter therefore lasts about 50–100 days without maintenance.
-- At condition below 40, the home rest bonus falls by half. Below 15, the
-  shelter **leaks**: it no longer counts as housing.
-
-### 5.2 Maintenance and repair
-
-- A new `repair` action, available to builders (and anyone at a low weight),
-  scores on the condition of their own home first.
-- Each repair consumes 1 wood from the stockpile for 20 condition and 20
-  labour ticks. The wood goes into `ledger.woodUsed` (conserved).
-
-### 5.3 Demolition and ruins
-
-- At condition 0 a shelter becomes a **ruin**. It is still solid (rule 14)
-  and holds a share of its wood as salvage.
-- Residents become homeless and re-home through the existing planner.
-- **Salvage/demolish** action: removes a ruin and returns its salvage wood to
-  the stockpile (conserved). A ruin left alone is overgrown after 60 days:
-  its tile is released to the ecology and its wood decays.
-
-### 5.4 Reconstruction
-
-- The planner prefers **ruin tiles** as sites, since the land is cleared and
-  salvage counts towards the wood. "Rebuilt the old house" is recorded as an
-  event with history.
-
-### 5.5 Growth and abandonment
-
-- **Growth:** new shelters as households form (M13). Sites spread outwards,
-  following the existing walk-distance ranking.
-- **Abandonment:** a shelter with no residents decays at double the rate and
-  eventually becomes a ruin. If the whole village moves its camp (deferred;
-  see §8), the old camp becomes a ruin field.
-- Ruins are a strong source of visual history: the map carries the scars of
-  the past.
+- **Condition:**
+  - Shelters have condition 0–100. It decays by about 1 a day, faster when
+    unoccupied, and faster in winter from M11.
+  - Below 40, the home rest bonus is halved. Below 15, the shelter leaks and
+    stops counting as housing.
+- **Repair:** a `repair` action uses 1 wood and 20 labour for +20 condition.
+  The wood goes to `ledger.woodUsed` (conserved).
+- **Ruins:**
+  - At condition 0 a shelter becomes a ruin. It is still solid (rule 14) and
+    holds salvage wood.
+  - Residents re-home through §4.4.
+  - Salvage returns the wood to the stockpile.
+  - An untouched ruin is overgrown after 60 days: the tile returns to the
+    ecology and the wood decays.
+- **Reconstruction:** the planner prefers ruin tiles (cleared land, with
+  salvage counting towards the wood).
+- **Growth and abandonment:** headroom building (§4.4) grows the village.
+  Empty homes decay twice as fast. Camp relocation is deferred.
 
 ---
 
 ## 8. Production roadmap (M10–M14)
 
-Each milestone is small, independently testable and shippable. It must pass
-`npm test`, `npm run build`, lint and a **sweep with explicit acceptance
-criteria**. Every schema change has a migration and fixtures from all
-previous versions.
+Every milestone must pass the following before it is committed:
 
-| Milestone | Scope | Key acceptance |
+- `npm test`, `npm run build` and lint;
+- the sweep's **hard gates**;
+- a report against its **balance targets** (TDS §7.6).
+
+Schema changes ship with migrations and fixtures.
+
+| Milestone | Scope | Gate summary |
 |---|---|---|
-| **M10a — Calendar** | Season and year derived from tick; `seasonStarted` and `yearStarted` events; clock and tooltip display; season in history samples. **No behaviour change.** | Determinism; v5 saves load with correct dates; the M9 sweep is unchanged to the byte (apart from the added events). |
-| **M10b — Plant life cycle** | Stages, aging, death, deadwood rot; stage-dependent max and regrowth; `foodDecayed`/`woodDecayed`; staggered initial ages; schema v6 and migration; new sprites. | Conservation every tick; no synchronous die-off; the tick-0 map is identical for existing seeds. |
-| **M10c — Dispersal and habitat** | Seed casting, habitat, crowding, settled clearing, safety cap, seasonal germination. | Population bands hold over 30 seeds × 120 days and 3 × 400 days; housing is unaffected; the cap is never hit. |
-| **M10d — Ecology dashboard** | Ecology card, ecology chart, "forage near camp" metric, 120-day sweep added to `npm run sweep`. | Multi-seed criteria (TDS §7.6); browser soak of 30 min at 10× without leaks. |
-| **M11 — Seasons that matter, and faster time** | Seasonal fruiting, winter stockpile target, food spoilage, seasonal tint, 30× and "seasons pass" with auto-pause. | 0 starvation across two winters on 30 seeds; frame budget held at 30×. |
-| **M12 — Life course** | `bornTick`, ages and stages for the existing 12; elders; tile inspector; partners and household bond; archive and chronicle data structures. Natural death stays **off**. | v6→v7 migration; the chronicle is bounded; the inspector shows family. |
-| **M13 — Generations** | Births, children, caregiving, natural death, population cap (60), relationship cap per citizen, per-decision performance work. | 30 seeds × 3 years: population stays within 8–60, no extinction, no runaway; performance budget at 50 citizens. |
-| **M14 — Settlement wear** | Condition, decay, repair, ruins, salvage, reconstruction, abandonment. | Wood conserved; housing recovers after decay; performance at 100 citizens (headless). |
-
-**Why this order:** each milestone builds on a stable lower layer. The
-calendar comes before seasons, seasons before births (generations need fast
-time and winter pressure), and population before decay (abandonment needs a
-changing population). **Natural death ships together with births** in M13,
-never before them, so worlds never simply dwindle.
+| **M10a — Calendar** | Pure calendar functions; clock, feed season separators and chart season bands, **all UI-derived**. **No sim state, events or IDs change.** | `serialize()` byte-identical to the pre-M10a golden hashes; full suite. |
+| **M10b — Plant life cycle** | Stages, aging, death, harvestable deadwood (pioneer trees), stage caps, decay ledger, staggered initial ages, schema v6 (+ a separate event-ID counter), sprites. | Conservation every tick; tick-0 map hashes unchanged; migration fixtures; staggered ages. |
+| **M10c — Dispersal, habitat, recovery** | Seeding with thresholds, habitat, crowding, clearing, safety cap, seasonal germination, fallen fruit. | Hard gates plus a controlled collapse-and-recovery scenario; balance report. |
+| **M10d — Ecology dashboard** | Ecology card, chart, forage-near-camp and nearest-ripe-bush metrics, sweep extensions (O1–O4). | All hard gates; balance targets met or explained; 30-min soak. |
+| *M10e — Wonder prototype (optional)* | Scatter Seeds behind a flag; playtest (§1.6). | Keep/kill decision; no schema change. |
+| **M11 — Seasons that matter, faster time** | Seasonal fruiting, winter stockpile behaviour, spoilage, tint, 30× and "seasons pass". | Balance: winters survivable under normal conditions; frame budget at 30×. |
+| **M12 — Life course (data and view)** | Population review outcome (timescales and terms); `bornTick` and stages; partners; households (data only); archive and chronicle; tile and family inspector. Natural death **off**. | v6→v7 migration; bounded chronicle. |
+| **M13 — Generations** | Births, children, natural death, §4.4 housing (headroom, overcrowding demand, household assignment), population cap, relationship cap, performance work. | Deadlock-freedom tests; population bounded; budget at 50 citizens. |
+| **M14 — Settlement wear** | Condition, repair, ruins, salvage, reconstruction, abandonment. | Wood conserved; housing recovers; budget at 100 citizens (headless). |
 
 ### Deferred (complexity without enough gameplay yet)
 
-- **Wildlife and hunting.** They need movement AI for non-citizens, predation
-  balance and new conservation flows. Revisit after M14.
-- **Terrain change** (grass becoming forest, erosion, rivers). It needs map
-  re-baking and pathfinding cache invalidation for a mostly cosmetic payoff.
-  Trees on grass already show forest creep.
-- **Stored moisture and soil fertility layers.** Wait for a mechanic that
-  reads them (blessings, farming).
-- **Felling to clear tiles** and **farming/planting** by citizens. These
-  belong with a deliberate land-use design, not M10.
-- **Seasonal day length.** It forces a retune of energy and sleep with little
-  payoff.
-- **Multiple settlements, migration, trade, technology, combat.** They change
-  the game's identity and come after the Hand phase design.
-- **Genetics beyond trait blending; religion as a system** before the Hand
-  phase exists.
-- **Web Worker simulation.** Only once 100+ citizens make the main thread a
-  bottleneck. The engine is already pure, so this is a mechanical move.
-- **Larger maps.** These come after the 100-citizen performance work.
+- Wildlife and hunting.
+- Terrain change (forest spreading as terrain, erosion, rivers).
+- Moisture and fertility layers.
+- Long-lived tree species (until the population timescales are decided).
+- Felling, farming and planting by citizens.
+- Seasonal day length.
+- Multiple settlements, migration, trade, technology, combat.
+- Genetics beyond trait blending; religion as a system before the Hand
+  phase.
+- Web Worker sim (only when 100+ citizens require it); larger maps.
+
+---
+
+## Change log
+
+**Revision 2 (this review):**
+
+- **Calendar:**
+  - Seasons and years approved.
+  - Age terminology and thresholds are now *deferred to the population
+    review* (§2.3); the illustrative generation table was removed.
+  - Season and year boundaries are UI-derived, with no sim events (§2.7).
+- **Trees:** the inconsistency is resolved. M10 trees are *pioneer trees*
+  (2–3 years). Long-lived species are deferred, with a reserved migration
+  path (§3.3). Deadwood approved.
+- **Collapse and recovery:** added §3.10. There are no rescue mechanics; five
+  natural recovery mechanisms, including fallen fruit; collapse is a
+  permitted outcome.
+- **Gameplay outcomes:** added §3.11 (O1–O4 with metrics) and the Wonder
+  prototype (§1.6, M10e).
+- **Housing deadlock:** identified in code and resolved by headroom,
+  overcrowding-as-demand and household assignment (§4.4).
+- **Roadmap:** gates are split into hard gates and balance targets. M10a
+  changes no state. Optional M10e added.
