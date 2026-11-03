@@ -1,8 +1,8 @@
-import { DECISION_INTERVAL, INITIAL_NEEDS, ROLES, TRAIT_PRECISION } from '../constants.ts'
+import { DAYS_PER_YEAR, DECISION_INTERVAL, FOUNDER_AGE, INITIAL_NEEDS, ROLES, TICKS_PER_DAY, TRAIT_PRECISION } from '../constants.ts'
 import { toPoint } from '../grid.ts'
 import { allocateId } from '../ids.ts'
 import { spawnCandidates, startRegion } from '../map/generate.ts'
-import { nextFloat, shuffle } from '../rng.ts'
+import { nextFloat, nextInt, seedRng, shuffle } from '../rng.ts'
 import type { Citizen, Personality, Point, Role, RngState, TileIndex, WorldState } from '../types.ts'
 import { CITIZEN_NAMES } from './names.ts'
 
@@ -63,6 +63,27 @@ export function createCitizen(
     alive: true,
     diedTick: null,
     deathCause: null,
+    bornTick: 0, // founders' ages: assignFounderAges; newborns: lifecycle.ts
+    parentIds: null,
+    partnerId: null,
+    childIds: [],
+    lastChildTick: null,
+  }
+}
+
+/**
+ * Founders' ages (Population V1): adults aged FOUNDER_AGE.min–max with
+ * birthdays spread over the year, from a creation-only stream derived from the
+ * seed (`seed#founders`). The AI stream is untouched, so founders' names,
+ * roles, spawn tiles and personalities are exactly as in v0.1. bornTick is a
+ * dawn tick, so birthdays fall at dawn.
+ */
+export function assignFounderAges(citizens: Citizen[], seed: string): void {
+  const rng = seedRng(`${seed}#founders`)
+  for (const c of citizens) {
+    const years = nextInt(rng, FOUNDER_AGE.min, FOUNDER_AGE.max)
+    const dayOfYear = nextInt(rng, 0, DAYS_PER_YEAR - 1)
+    c.bornTick = -(years * DAYS_PER_YEAR + dayOfYear) * TICKS_PER_DAY
   }
 }
 

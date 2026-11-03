@@ -57,7 +57,11 @@ export function behaviourProjection(state: Loose): unknown {
       diedTick: c.diedTick,
       deathCause: c.deathCause,
     })),
-    history: state.history,
+    // v5 sample fields only, in their v5 order (later schemas add optional fields).
+    history: state.history.map((h: Loose) => ({
+      tick: h.tick, population: h.population, food: h.food, wood: h.wood, housed: h.housed, capacity: h.capacity,
+      discovered: h.discovered, satiety: h.satiety, energy: h.energy, health: h.health, social: h.social,
+    })),
     events: state.events.map((e: Loose) => {
       const data = e.data ? { ...e.data } : undefined
       if (data && typeof data.structureId === 'number') data.structureId = sid(data.structureId)

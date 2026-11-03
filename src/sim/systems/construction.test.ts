@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { sandbox } from '../__tests__/sandbox.ts'
 import {
+  SITE_OUTER_CAMP_DISTANCE,
   ENERGY_RATES,
   SHELTER_CAPACITY,
   SHELTER_WOOD,
@@ -115,12 +116,14 @@ describe('construction rules', () => {
   })
 
   it('never cuts off a route: a chokepoint tile is rejected', () => {
-    // A 1-wide corridor leads from camp (0,2) to the east. Tiles 3..6 from camp all lie on it.
-    const rows = ['~~~~~~~~~~', '~~~~~~~~~~', '..........', '~~~~~~~~~~', '~~~~~~~~~~']
+    // A 1-wide corridor leads from camp (0,2) to the east, longer than the outer site ring:
+    // every candidate tile (3..SITE_OUTER_CAMP_DISTANCE from camp) lies on it and would cut it.
+    const W = SITE_OUTER_CAMP_DISTANCE + 4
+    const rows = ['~'.repeat(W), '~'.repeat(W), '.'.repeat(W), '~'.repeat(W), '~'.repeat(W)]
     const { state } = sandbox(rows, { camp: [0, 2], citizens: [{ x: 1, y: 2 }] })
     expect(chooseSite(state)).toBeNull()
     // Widen the corridor and a site becomes possible.
-    state.map.terrain = state.map.terrain.map((t, i) => (Math.floor(i / 10) === 1 ? 'grass' : t))
+    state.map.terrain = state.map.terrain.map((t, i) => (Math.floor(i / W) === 1 ? 'grass' : t))
     const tile = chooseSite(state)
     expect(tile).not.toBeNull()
   })
@@ -302,5 +305,29 @@ describe('construction in a running colony', () => {
     stepN(resumed, 800)
     stepN(straight, 800)
     expect(serialize(resumed)).toBe(serialize(straight))
+  })
+})
+
+describe('settlement growth beyond the inner ring (Population V1)', () => {
+  it('fills the inner ring first, then builds further out — never cutting routes', () => {
+    const rows = Array.from({ length: 23 }, () => '.......................')
+    const { state } = sandbox(rows, { camp: [11, 11], citizens: [{ x: 11, y: 12 }] })
+    const camp = state.structures[0]!.tile
+    const dist = (t: number) => Math.abs((t % 23) - 11) + Math.abs(Math.floor(t / 23) - 11)
+    const distances: number[] = []
+    for (let k = 0; k < 40; k++) {
+      const tile = chooseSite(state)
+      if (tile === null) break
+      distances.push(dist(tile))
+      state.structures.push({ id: 1000 + k, kind: 'shelter', tile, stage: 'complete', buildProgress: 60, buildCost: 60, woodDelivered: 12, woodRequired: 12, lastWorkTick: 0, residentIds: [] })
+      const solid = solidTiles(state)
+      const reach = reachableMask(state.map, camp, (t) => state.map.discovered[t] === 1 && !solid.has(t))
+      const open = state.map.terrain.filter((_t, i) => !solid.has(i)).length
+      expect(reach.reduce((n, v) => n + v, 0)).toBe(open) // every open tile still reachable
+    }
+    const firstOuter = distances.findIndex((d) => d > SITE_MAX_CAMP_DISTANCE)
+    expect(firstOuter).toBeGreaterThan(5) // a decent inner village first…
+    expect(distances.slice(firstOuter).every((d) => d > SITE_MAX_CAMP_DISTANCE && d <= SITE_OUTER_CAMP_DISTANCE)).toBe(true) // …then the outer ring only
+    expect(distances.length).toBeGreaterThanOrEqual(20) // room for a 60-citizen village
   })
 })

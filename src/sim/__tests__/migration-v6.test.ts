@@ -4,7 +4,7 @@ import { PLANT_LIFESPAN_DAYS, PLANT_MATURE_AT_DAYS, SCHEMA_VERSION, TICKS_PER_DA
 import { oldAtDays, plantAgeDays } from '../ecology/flora.ts'
 import { deserialize, serialize } from '../serialize.ts'
 import type { ResourceNode } from '../types.ts'
-import { stepN } from '../world.ts'
+import { DEFAULT_SIM_RULES, stepN, stepWithRules } from '../world.ts'
 import { behaviourHash } from './fingerprint.ts'
 import { conservationTotals, plantViolations } from './invariants.ts'
 
@@ -79,13 +79,13 @@ describe('v5 → v6 migration of a real v0.1 save', () => {
     expect(w.events.map((e) => e.id)).toEqual(v5.events.map((e: { id: number }) => e.id))
   })
 
-  it('continues exactly as the v0.1 simulation would have (behaviour parity for 30 days)', () => {
+  it('continues exactly as the v0.1 simulation would have (behaviour parity for 30 days, population rules off)', () => {
     const s = deserialize(v5json)
     const start = conservationTotals(s)
     const got: { tick: number; behaviour: string }[] = []
     for (const c of expected.continuation) {
       while (s.tick < c.tick) {
-        stepN(s, 1)
+        stepWithRules(s, { ...DEFAULT_SIM_RULES, population: false })
         expect(conservationTotals(s)).toEqual(start)
       }
       got.push({ tick: s.tick, behaviour: behaviourHash(s) })

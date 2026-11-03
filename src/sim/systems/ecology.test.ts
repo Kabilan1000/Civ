@@ -262,7 +262,7 @@ describe('whole simulation with senescence on (the M10c configuration, minus rep
       for (let t = 0; t < 60 * TICKS_PER_DAY; t++) {
         const deadBefore = s.map.resources.reduce((n, r) => n + (r?.stage === 'dead' ? r.amount : 0), 0)
         const rotBefore = s.ledger.woodDecayed
-        stepWithRules(s, { ecology: ON })
+        stepWithRules(s, { ecology: ON, population: true })
         expect(conservationTotals(s)).toEqual(start)
         const violations = plantViolations(s, true)
         expect(violations, `tick ${s.tick}`).toEqual([])

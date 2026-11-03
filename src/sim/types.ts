@@ -116,6 +116,8 @@ export type MemoryKind =
   | 'builtShelter'
   | 'sawDeath'
   | 'discovered'
+  | 'childBorn'
+  | 'partnered'
 
 /** Something that really happened to this citizen. See citizens/memory.ts. */
 export interface Memory {
@@ -168,9 +170,48 @@ export interface Citizen {
   alive: boolean
   diedTick: number | null
   deathCause: DeathCause | null
+  // ── Population V1 (schema v7) ──
+  /** Tick of birth, aligned to a dawn; negative for founders. Age in world years = floor((tick − bornTick) / TICKS_PER_YEAR). */
+  bornTick: number
+  /** Parents' ids (null for founders). They may since have been archived. */
+  parentIds: [number, number] | null
+  /** Living partner (mutual), or null. Cleared on the partner's death. */
+  partnerId: number | null
+  /** Children's ids, ascending. */
+  childIds: number[]
+  /** Tick this citizen last became a parent, or null. */
+  lastChildTick: number | null
 }
 
-export type DeathCause = 'starvation' | 'exhaustion'
+export type DeathCause = 'starvation' | 'exhaustion' | 'oldAge'
+
+/** A citizen who died long ago, compacted (Population V1). */
+export interface PersonRecord {
+  id: number
+  name: string
+  role: Role
+  bornTick: number
+  diedTick: number
+  cause: DeathCause
+  parentIds: [number, number] | null
+  partnerId: number | null
+  childIds: number[]
+}
+
+/** Population bookkeeping (Population V1). People themselves are in `citizens` and `archive`. */
+export interface PopulationState {
+  /** Dedicated stream for births, newborns' names/traits/roles and old-age rolls. */
+  rng: RngState
+  /** Cumulative since world creation (or migration to schema v7). */
+  counters: {
+    births: number
+    deaths: number
+    oldAgeDeaths: number
+    partnerships: number
+    comingOfAge: number
+    archived: number
+  }
+}
 
 export type StructureKind = 'campfire' | 'shelter'
 
@@ -213,6 +254,9 @@ export type SimEventKind =
   | 'died'
   | 'friendship'
   | 'rivalry'
+  | 'born'
+  | 'cameOfAge'
+  | 'partnered'
 
 export interface SimEvent {
   id: number
@@ -281,6 +325,13 @@ export interface HistorySample {
   energy: number
   health: number
   social: number
+  /** Population V1: absent in samples recorded before the save reached schema v7. */
+  children?: number
+  adults?: number
+  elders?: number
+  /** Cumulative births and deaths (population counters) at sample time. */
+  births?: number
+  deaths?: number
 }
 
 export interface WorldConfig {
@@ -311,4 +362,7 @@ export interface WorldState {
   /** Oldest first; capped at MAX_EVENTS. */
   events: SimEvent[]
   ecology: EcologyState
+  /** Dead citizens compacted after ARCHIVE_AFTER_DAYS; oldest first, at most ARCHIVE_MAX. */
+  archive: PersonRecord[]
+  population: PopulationState
 }

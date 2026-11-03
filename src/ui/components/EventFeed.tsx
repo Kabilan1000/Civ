@@ -1,11 +1,11 @@
 import { memo, useMemo, useState } from 'react'
 import type { SimulationController } from '../../app/SimulationController.ts'
-import { EVENT_CATEGORIES, MAX_EVENTS, getEvents, type EventCategory } from '../../sim/index.ts'
+import { EVENT_CATEGORIES, MAX_EVENTS, getEvents, getPersonName, isListedCitizen, type EventCategory } from '../../sim/index.ts'
 import { formatCalendarTick, withSeasonSeparators } from '../format/calendar.ts'
 import { CATEGORY_LABELS, describeEvent, formatTick } from '../format/text.ts'
 import { CitizenLink } from './CitizenLink.tsx'
 
-const ORDER: EventCategory[] = ['social', 'construction', 'exploration', 'survival', 'time']
+const ORDER: EventCategory[] = ['social', 'family', 'construction', 'exploration', 'survival', 'time']
 
 interface Props {
   controller: SimulationController
@@ -23,7 +23,7 @@ export const EventFeed = memo(function EventFeed({ controller, lastEventId, worl
   const events = useMemo(() => getEvents(state, active).filter((e) => e.id <= lastEventId), [state, active, lastEventId])
   // Season separators are derived from the listed events' ticks; they are not stored events.
   const items = useMemo(() => withSeasonSeparators(events), [events])
-  const nameOf = (id: number) => state.citizens.find((c) => c.id === id)?.name ?? `#${id}`
+  const nameOf = (id: number) => getPersonName(state, id)
   const toggle = (c: EventCategory) => setActive((a) => (a.includes(c) ? a.filter((x) => x !== c) : [...a, c]))
 
   return (
@@ -63,8 +63,10 @@ export const EventFeed = memo(function EventFeed({ controller, lastEventId, worl
                   {describeEvent(e, nameOf).map((seg, i) =>
                     typeof seg === 'string' ? (
                       <span key={i}>{seg}</span>
-                    ) : (
+                    ) : isListedCitizen(state, seg.citizenId) ? (
                       <CitizenLink key={i} id={seg.citizenId} name={seg.name} onSelect={onSelect} dead={!state.citizens.find((c) => c.id === seg.citizenId)?.alive} />
+                    ) : (
+                      <span key={i} className="muted" title="Long dead (archived)">{seg.name}</span>
                     ),
                   )}
                 </span>

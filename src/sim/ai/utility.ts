@@ -4,17 +4,29 @@
 
 import { SCORE_JITTER } from '../constants.ts'
 import { nextFloat } from '../rng.ts'
-import type { ActionScore } from '../types.ts'
+import { lifeStage, type LifeStage } from '../citizens/life.ts'
+import type { ActionKind, ActionScore } from '../types.ts'
 import { ACTIONS } from './actions/index.ts'
 import type { DecisionContext } from './context.ts'
+
+/** Children only eat, rest, play (wander near camp) and chat; elders do everything but explore. */
+const CHILD_ACTIONS: ReadonlySet<ActionKind> = new Set(['eat', 'rest', 'socialize', 'wander'])
+export function allowedFor(stage: LifeStage, kind: ActionKind): boolean {
+  if (stage === 'child') return CHILD_ACTIONS.has(kind)
+  if (stage === 'elder') return kind !== 'explore'
+  return true
+}
 
 /** Scores rounded to 3 decimals for readable `lastScores`; never affects ordering ties. */
 const round = (x: number) => Math.round(x * 1000) / 1000
 
 /** All actions, best first (ties keep ACTIONS order). Impossible actions score 0 and get no jitter. */
 export function scoreActions(ctx: DecisionContext): ActionScore[] {
+  const stage = lifeStage(ctx.citizen, ctx.state.tick)
   const scored = ACTIONS.map((a, order) => {
-    const base = a.score(ctx)
+    // Life stage limits what a citizen may do (Population V1). The jitter is
+    // drawn for every action regardless, so the RNG draw count never changes.
+    const base = allowedFor(stage, a.kind) ? a.score(ctx) : 0
     const jitter = nextFloat(ctx.state.rng) * SCORE_JITTER
     return { kind: a.kind, score: base > 0 ? base + jitter : 0, order }
   })

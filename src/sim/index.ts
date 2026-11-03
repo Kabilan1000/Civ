@@ -21,4 +21,6 @@ export {
   yearAt,
 } from './calendar.ts'
 export type { CalendarDate } from './calendar.ts'
+export { ageYears, isChild, lifeStage, lifeStageAt, oldAgeHazardPermille } from './citizens/life.ts'
+export type { LifeStage } from './citizens/life.ts'
 export { toIndex, toPoint } from './grid.ts'

@@ -68,10 +68,13 @@ export const MEMORY_LABELS: Record<MemoryKind, string> = {
   builtShelter: 'Finished a shelter',
   sawDeath: 'Saw a death',
   discovered: 'Discovered land',
+  childBorn: 'Had a child',
+  partnered: 'Found a partner',
 }
 
 export const CATEGORY_LABELS: Record<EventCategory, string> = {
   social: 'Social',
+  family: 'Family',
   construction: 'Building',
   exploration: 'Exploration',
   survival: 'Survival',
@@ -114,8 +117,17 @@ export function describeEvent(e: SimEvent, nameOf: (id: number) => string): Segm
       return [who(0), ` explored ${String(d.tiles ?? '')} new tiles.`]
     case 'starving':
       return [who(0), ' is starving.']
-    case 'died':
-      return [who(0), ` died of ${String(d.cause ?? 'unknown causes')}.`]
+    case 'died': {
+      const age = d.age === undefined ? '' : ` at ${String(d.age)}`
+      if (d.cause === 'oldAge') return [who(0), ` died of old age${age}.`]
+      return [who(0), ` died of ${String(d.cause ?? 'unknown causes')}${age}.`]
+    }
+    case 'born':
+      return [who(0), ' was born to ', who(1), ' and ', who(2), '.']
+    case 'cameOfAge':
+      return [who(0), ` came of age (${String(d.age ?? '')}) and joined the workforce.`]
+    case 'partnered':
+      return [who(0), ' and ', who(1), ' became partners.']
   }
 }
 

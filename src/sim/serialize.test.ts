@@ -62,8 +62,9 @@ describe('serialize / deserialize', () => {
     })
     // Everything carries over except data v1 never had: the decision tick is unknown.
     expect(loaded.citizens.map((c) => c.lastDecisionTick)).toEqual(s.citizens.map(() => null))
-    expect(loaded.citizens.map((c) => ({ ...c, lastDecisionTick: null, memories: c.memories.map((m) => m.kind) })))
-      .toEqual(s.citizens.map((c) => ({ ...c, lastDecisionTick: null, memories: c.memories.map((m) => m.kind) })))
+    // …and ages: v1 had none, so the v6 → v7 step gives founders hash-derived adult ages.
+    const strip = (c: (typeof s.citizens)[number]) => ({ ...c, lastDecisionTick: null, bornTick: 0, memories: c.memories.map((m) => m.kind) })
+    expect(loaded.citizens.map(strip)).toEqual(s.citizens.map(strip))
     expect(loaded.history).toEqual([]) // never fabricated
     expect(loaded.structures[0]).toMatchObject({ kind: 'campfire', stage: 'complete' })
     stepN(loaded, 200)
@@ -159,7 +160,7 @@ describe('serialize / deserialize', () => {
     ['id beyond nextId', (r: any) => (r.nextId = 2), /id/],
     ['structure', (r: any) => delete r.structures[0].kind, /structures\[0\]\.kind/],
     ['structure stage', (r: any) => (r.structures[0].stage = 'ruined'), /structures\[0\]\.stage/],
-    ['over-capacity shelter', (r: any) => (r.structures[0].residentIds = r.citizens.slice(0, 4).map((c: any) => c.id)), /residentIds/],
+    ['over-capacity shelter', (r: any) => (r.structures[0].residentIds = r.citizens.slice(0, 6).map((c: any) => c.id)), /residentIds/], // 3 beds + 2 overcrowding
     ['self relationship', (r: any) => (r.citizens[0].relationships[r.citizens[0].id] = { affinity: 0, familiarity: 0, lastTick: 0 }), /relationships/],
     ['relationship to nobody', (r: any) => (r.citizens[0].relationships['9999'] = { affinity: 0, familiarity: 0, lastTick: 0 }), /relationships/],
     ['affinity out of range', (r: any) => (r.citizens[0].relationships[r.citizens[1].id] = { affinity: 101, familiarity: 0, lastTick: 0 }), /affinity/],

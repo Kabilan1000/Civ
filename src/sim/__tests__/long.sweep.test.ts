@@ -6,7 +6,7 @@
 import { performance } from 'node:perf_hooks'
 import { conservationTotals, plantViolations } from './invariants.ts'
 import { describe, expect, it } from 'vitest'
-import { CARRY_CAPACITY, MAX_EVENTS, MAX_MEMORIES, PLANT_SENESCENCE_ENABLED, SHELTER_CAPACITY, TICKS_PER_DAY } from '../constants.ts'
+import { CARRY_CAPACITY, MAX_EVENTS, MAX_MEMORIES, MAX_OVERCROWD, PLANT_SENESCENCE_ENABLED, SHELTER_CAPACITY, TICKS_PER_DAY } from '../constants.ts'
 import { isAdjacent4, isPassable, toIndex } from '../grid.ts'
 import { getCivStats } from '../selectors.ts'
 import { deserialize, serialize } from '../serialize.ts'
@@ -112,7 +112,7 @@ function runSeed(seed: string, days: number): Report {
       }
     }
     for (const sh of s.structures) {
-      expect(sh.residentIds.length).toBeLessThanOrEqual(SHELTER_CAPACITY)
+      expect(sh.residentIds.length).toBeLessThanOrEqual(SHELTER_CAPACITY + MAX_OVERCROWD)
       expect(sh.woodDelivered).toBeLessThanOrEqual(sh.woodRequired)
     }
     for (const e of s.events) {

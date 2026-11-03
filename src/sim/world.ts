@@ -1,4 +1,4 @@
-import { createCitizens } from './citizens/create.ts'
+import { assignFounderAges, createCitizens } from './citizens/create.ts'
 import { resolveConfig } from './config.ts'
 import { INITIAL_STOCKPILE, SCHEMA_VERSION, START_DISCOVERY_RADIUS } from './constants.ts'
 import { pushEvent } from './events.ts'
@@ -12,6 +12,7 @@ import { recordHistory, recordSample } from './systems/history.ts'
 import { updateNeeds } from './systems/needs.ts'
 import { assignInitialAges } from './ecology/flora.ts'
 import { DEFAULT_ECOLOGY_RULES, updateEcology, type EcologyRules } from './systems/ecology.ts'
+import { updateLifeCycle } from './systems/lifecycle.ts'
 import { advanceTasks } from './systems/tasks.ts'
 import { advanceTime } from './systems/time.ts'
 import type { Structure, TileIndex, WorldConfig, WorldState } from './types.ts'
@@ -73,10 +74,16 @@ export function createWorld(overrides: Partial<WorldConfig> = {}): WorldState {
       rng: seedRng(`${config.seed}#ecology`),
       counters: { births: { berries: 0, wood: 0 }, deaths: { berries: 0, wood: 0 }, seedsCast: 0, fallenFruitSprouts: 0 },
     },
+    archive: [],
+    population: {
+      rng: seedRng(`${config.seed}#population`),
+      counters: { births: 0, deaths: 0, oldAgeDeaths: 0, partnerships: 0, comingOfAge: 0, archived: 0 },
+    },
   }
 
   state.structures.push(createCampfire(allocateId(state), campTile))
   state.citizens = createCitizens(state, campTile)
+  assignFounderAges(state.citizens, config.seed) // own derived stream
   recordSample(state) // tick 0
   pushEvent(state, 'worldCreated', state.citizens.map((c) => c.id), {
     seed: config.seed,
@@ -89,7 +96,7 @@ export function createWorld(overrides: Partial<WorldConfig> = {}): WorldState {
 /**
  * Advance the world by exactly one tick, mutating it in place.
  * System order is fixed (see docs/ARCHITECTURE.md §3.4):
- * time → needs (incl. health, death) → ecology → construction → decide → act → history.
+ * time → needs (incl. health, death) → ecology → life cycle (dawn) → construction → decide → act → history.
  * Social and stats systems (M6/M7) will follow act.
  */
 export function step(state: WorldState): void {
@@ -99,9 +106,14 @@ export function step(state: WorldState): void {
 /** Rule switches for systems still under development (only tests change them). */
 export interface SimRules {
   ecology: EcologyRules
+  /**
+   * Population V1 (life cycle + housing headroom). Always on in the game; tests
+   * turn it off to prove everything else still behaves exactly like v0.1.
+   */
+  population: boolean
 }
 
-export const DEFAULT_SIM_RULES: Readonly<SimRules> = { ecology: DEFAULT_ECOLOGY_RULES }
+export const DEFAULT_SIM_RULES: Readonly<SimRules> = { ecology: DEFAULT_ECOLOGY_RULES, population: true }
 
 /**
  * step() with explicit rules — e.g. plant senescence on, which stays off by
@@ -111,7 +123,8 @@ export function stepWithRules(state: WorldState, rules: Readonly<SimRules>): voi
   advanceTime(state)
   updateNeeds(state)
   updateEcology(state, rules.ecology)
-  updateConstruction(state)
+  if (rules.population) updateLifeCycle(state)
+  updateConstruction(state, { headroom: rules.population })
   decide(state)
   advanceTasks(state)
   recordHistory(state)

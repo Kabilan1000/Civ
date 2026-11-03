@@ -5,6 +5,7 @@
 // or interpolated — a migrated save starts with an empty history.
 
 import { HISTORY_INTERVAL, HISTORY_MAX, SHELTER_CAPACITY } from '../constants.ts'
+import { countStages } from '../selectors.ts'
 import type { HistorySample, WorldState } from '../types.ts'
 
 export function takeSample(state: WorldState): HistorySample {
@@ -25,6 +26,9 @@ export function takeSample(state: WorldState): HistorySample {
     energy: avg('energy'),
     health: avg('health'),
     social: avg('social'),
+    ...countStages(living, state.tick),
+    births: state.population.counters.births,
+    deaths: state.population.counters.deaths,
   }
 }
 

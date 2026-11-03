@@ -12,9 +12,11 @@
 //   • Living citizens within WITNESS_RADIUS remember seeing it ('sawDeath').
 //   • Others' relationship records with the dead are kept (history); the
 //     dead can never be chosen for, or take part in, a new interaction.
-// Cause: 'starvation' if satiety is 0, otherwise 'exhaustion'.
+// Cause (needs): 'starvation' if satiety is 0, otherwise 'exhaustion'.
+// Cause 'oldAge': the birthday hazard in systems/lifecycle.ts (Population V1).
 
 import { WITNESS_RADIUS } from '../constants.ts'
+import { ageYears } from '../citizens/life.ts'
 import { remember } from '../citizens/memory.ts'
 import { pushEvent } from '../events.ts'
 import { manhattan } from '../grid.ts'
@@ -38,7 +40,13 @@ export function killCitizen(state: WorldState, c: Citizen, cause: DeathCause): v
   }
   for (const s of state.structures) s.residentIds = s.residentIds.filter((id) => id !== c.id)
   c.homeId = null
-  pushEvent(state, 'died', [c.id], { cause, day: dayNumberAt(state.tick) })
+  // The partner is free to partner again; the dead keep partnerId as history.
+  if (c.partnerId !== null) {
+    const partner = state.citizens.find((o) => o.id === c.partnerId)
+    if (partner && partner.partnerId === c.id) partner.partnerId = null
+  }
+  state.population.counters.deaths++
+  pushEvent(state, 'died', [c.id], { cause, day: dayNumberAt(state.tick), age: ageYears(c, state.tick) })
   for (const o of state.citizens) {
     if (o.alive && manhattan(o.pos, c.pos) <= WITNESS_RADIUS) remember(state, o, 'sawDeath', -0.8, { subjectId: c.id })
   }

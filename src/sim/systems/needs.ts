@@ -11,6 +11,7 @@
 //            At health 0 the citizen dies (systems/death.ts).
 
 import {
+  CHILD_SATIETY_FACTOR,
   ENERGY_RATES,
   EXHAUSTED_HEALTH_LOSS,
   HEALTH_RECOVERY,
@@ -22,6 +23,7 @@ import {
   STARVING_HEALTH_LOSS,
   type Activity,
 } from '../constants.ts'
+import { isChild } from '../citizens/life.ts'
 import { getHome } from '../structures.ts'
 import type { Citizen, WorldState } from '../types.ts'
 import { killCitizen } from './death.ts'
@@ -45,7 +47,7 @@ export function updateNeeds(state: WorldState): void {
   const living = state.citizens.filter((c) => c.alive)
   for (const c of living) {
     const n = c.needs
-    n.satiety = clampNeed(n.satiety - SATIETY_DECAY)
+    n.satiety = clampNeed(n.satiety - (isChild(c, state.tick) ? SATIETY_DECAY * CHILD_SATIETY_FACTOR : SATIETY_DECAY))
     n.energy = clampNeed(n.energy + ENERGY_RATES[activityOf(c, state)])
 
     n.social = clampNeed(n.social - SOCIAL_DECAY)

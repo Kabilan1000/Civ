@@ -25,6 +25,12 @@ describe('history', () => {
           energy: Math.round(stats.avgNeeds.energy),
           health: Math.round(stats.avgNeeds.health),
           social: Math.round(stats.avgNeeds.social),
+          // Population V1: the same figures the dashboard shows.
+          children: stats.people.children,
+          adults: stats.people.adults,
+          elders: stats.people.elders,
+          births: stats.people.births,
+          deaths: stats.people.deaths,
         })
         expect(sample.capacity % SHELTER_CAPACITY).toBe(0)
       }

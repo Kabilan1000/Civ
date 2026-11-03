@@ -2,7 +2,7 @@
 import type { Needs, Role, Stockpile, Terrain } from './types.ts'
 
 /** Bump whenever the serialized WorldState shape changes, and add a migration. */
-export const SCHEMA_VERSION = 6
+export const SCHEMA_VERSION = 7
 
 // ── Time ────────────────────────────────────────────────────────────────────
 
@@ -244,6 +244,13 @@ export const SITE_MIN_CAMP_DISTANCE = 3
 export const SITE_MAX_CAMP_DISTANCE = 6
 /** …and at most this many walking steps from it (a house across a ridge is a bad site). */
 export const SITE_MAX_WALK_STEPS = 12
+/**
+ * Population V1: once the inner ring (≤ SITE_MAX_CAMP_DISTANCE) has no valid
+ * site left — it holds about ten shelters — the village may build further out.
+ * The inner ring is always tried first, so small villages are unaffected.
+ */
+export const SITE_OUTER_CAMP_DISTANCE = 10
+export const SITE_OUTER_WALK_STEPS = 20
 /** How often (ticks) the village considers planning a new shelter. */
 export const PLAN_INTERVAL = 10
 /** A site with no delivery or labour for this long is abandoned (wood refunded). */
@@ -301,6 +308,45 @@ export const GRUDGE_AFFINITY = -10
 export const GRUDGE_HEALING = 0.5
 /** Partners with affinity below this are avoided. */
 export const AVOID_AFFINITY = -50
+
+// ── Population V1 (schema v7, docs/design/LIVING_WORLD_TDS.md §8) ──────────
+// Ages are in world years (TICKS_PER_YEAR = 48 days), game-paced so a founding
+// generation is replaced within a session at 100×.
+export const ADULT_AGE = 14
+export const ELDER_AGE = 50
+/** Nobody lives past this age: the old-age hazard is certain on this birthday. */
+export const MAX_AGE = 65
+/** Founders' ages at world creation (inclusive). */
+export const FOUNDER_AGE = { min: 18, max: 36 } as const
+/** Partners must both be this age range to have a child. */
+export const FERTILE_AGE = { min: 16, max: 42 } as const
+/** Mutual affinity and familiarity both partners need (friendship is 50: deliberately reachable). */
+export const PARTNER_AFFINITY = 30
+export const PARTNER_FAMILIARITY = 30
+/** Daily chance (‰) that an eligible couple has a child. */
+export const BIRTH_CHANCE_PERMILLE = 40
+/** A parent has at most one child per this many days. */
+export const BIRTH_SPACING_DAYS = 48
+/** Births need stockpile food ≥ this × living citizens. */
+export const BIRTH_FOOD_PER_CAPITA = 3
+export const MAX_POPULATION = 60
+/** A home may hold this many residents above SHELTER_CAPACITY (children of its residents). */
+export const MAX_OVERCROWD = 2
+/** While prosperous, the planner keeps this many spare beds. */
+export const HOUSING_HEADROOM = 3
+/** Prosperous = stockpile food ≥ this × living (and population below the cap). */
+export const PROSPERITY_FOOD_PER_CAPITA = 5
+/** Children's satiety decays at this share of the adult rate. */
+export const CHILD_SATIETY_FACTOR = 0.6
+/** Children wander within this Manhattan distance of the campfire. */
+export const CHILD_ROAM_RADIUS = 4
+/** A child's traits are the parents' average ± up to this much (then rounded). */
+export const CHILD_TRAIT_VARIATION = 0.1
+/** Explorers are not assigned to newborns beyond this many. */
+export const MAX_EXPLORERS = 2
+/** The dead move to the compact archive this many days after death. */
+export const ARCHIVE_AFTER_DAYS = 48
+export const ARCHIVE_MAX = 400
 
 // ── Memory (M6) ─────────────────────────────────────────────────────────────
 

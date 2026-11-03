@@ -1,8 +1,9 @@
 // Wander: walk to a random nearby discovered tile, linger, repeat.
 // Low-scoring fallback when nothing more useful is available.
 
-import { ROLE_WEIGHTS, WANDER_MAX_TRIES, WANDER_RADIUS } from '../../constants.ts'
-import { inBounds, isPassable, toIndex } from '../../grid.ts'
+import { isChild } from '../../citizens/life.ts'
+import { CHILD_ROAM_RADIUS, ROLE_WEIGHTS, WANDER_MAX_TRIES, WANDER_RADIUS } from '../../constants.ts'
+import { inBounds, isPassable, toIndex, toPoint } from '../../grid.ts'
 import { nextInt } from '../../rng.ts'
 import type { DecisionContext } from '../context.ts'
 import { beginTask } from '../travel.ts'
@@ -20,12 +21,16 @@ export function scoreWander(ctx: DecisionContext): number {
 export function startWander(ctx: DecisionContext): boolean {
   const { state, citizen: c, steps } = ctx
   const { map, rng } = state
+  // Children play near home: around the campfire, within CHILD_ROAM_RADIUS.
+  const child = isChild(c, state.tick) && ctx.campTile !== null
+  const origin = child ? toPoint(ctx.campTile!, map.width) : c.pos
+  const radius = child ? CHILD_ROAM_RADIUS : WANDER_RADIUS
   for (let attempt = 0; attempt < WANDER_MAX_TRIES; attempt++) {
-    const dx = nextInt(rng, -WANDER_RADIUS, WANDER_RADIUS)
-    const reach = WANDER_RADIUS - Math.abs(dx)
+    const dx = nextInt(rng, -radius, radius)
+    const reach = radius - Math.abs(dx)
     const dy = nextInt(rng, -reach, reach)
-    const x = c.pos.x + dx
-    const y = c.pos.y + dy
+    const x = origin.x + dx
+    const y = origin.y + dy
     if (!inBounds(map, x, y)) continue
     const target = toIndex(x, y, map.width)
     if (target === ctx.here || !isPassable(map, target) || steps[target]! < 0) continue

@@ -5,10 +5,15 @@
 // The campfire stays walkable (citizens eat and deposit around it).
 
 import {
+  HOUSING_HEADROOM,
+  MAX_POPULATION,
   MAX_SITE_WORKERS,
+  PROSPERITY_FOOD_PER_CAPITA,
   SHELTER_CAPACITY,
   SITE_MAX_CAMP_DISTANCE,
   SITE_MAX_WALK_STEPS,
+  SITE_OUTER_CAMP_DISTANCE,
+  SITE_OUTER_WALK_STEPS,
   SITE_MIN_CAMP_DISTANCE,
 } from './constants.ts'
 import { isPassable, manhattan, neighbors4, toIndex, toPoint } from './grid.ts'
@@ -72,10 +77,32 @@ export function walkableFor(state: WorldState, c: Citizen): (tile: TileIndex) =>
   return (tile) => discovered[tile] === 1 && (tile === home || !solid.has(tile))
 }
 
-/** Living citizens minus housing slots in all shelters (planned ones included). */
-export function housingDeficit(state: WorldState): number {
-  const living = state.citizens.filter((c) => c.alive).length
-  return Math.max(0, living - getShelters(state).length * SHELTER_CAPACITY)
+/**
+ * Beds the village wants but doesn't have or plan (Population V1, TDS §8.4):
+ *   living (children included) + couples living apart + headroom
+ *   − beds in all shelters (planned ones included).
+ * Headroom (HOUSING_HEADROOM spare beds) applies only while the village is
+ * prosperous — at least one couple, food ≥ PROSPERITY_FOOD_PER_CAPITA × living
+ * and below the cap — so builders build ahead in good times. Every birth raises `living`, so a
+ * birth into a full home always creates demand: births can never deadlock
+ * waiting for a spare bed.
+ */
+export function housingDeficit(state: WorldState, opts: { headroom?: boolean } = {}): number {
+  const living = state.citizens.filter((c) => c.alive)
+  const n = living.length
+  let apart = 0
+  let couples = 0
+  for (const c of living) {
+    if (c.partnerId === null || c.partnerId < c.id) continue
+    const p = living.find((o) => o.id === c.partnerId)
+    if (!p) continue
+    couples++
+    if (c.homeId === null || c.homeId !== p.homeId) apart++
+  }
+  // Build ahead only when it can matter: families exist and food is plentiful.
+  const prosperous = couples > 0 && state.stockpile.food >= PROSPERITY_FOOD_PER_CAPITA * n && n < MAX_POPULATION
+  const wanted = n + apart + ((opts.headroom ?? true) && prosperous ? HOUSING_HEADROOM : 0)
+  return Math.max(0, wanted - getShelters(state).length * SHELTER_CAPACITY)
 }
 
 /** Wood carried by citizens currently hauling to `site`. */
@@ -123,7 +150,13 @@ export function workTiles(state: WorldState, site: Structure): TileIndex[] {
  * neighbours (keeps alleys open), and — the critical-route rule — making it
  * solid must not cut off any tile currently reachable from the campfire.
  */
-export function isValidSite(state: WorldState, tile: TileIndex, campTile: TileIndex, reachableBefore?: number): boolean {
+export function isValidSite(
+  state: WorldState,
+  tile: TileIndex,
+  campTile: TileIndex,
+  reachableBefore?: number,
+  maxCampDistance: number = SITE_MAX_CAMP_DISTANCE,
+): boolean {
   const { map } = state
   const t = map.terrain[tile]
   if ((t !== 'grass' && t !== 'sand' && t !== 'forest') || map.discovered[tile] !== 1 || map.resources[tile] !== null) {
@@ -133,7 +166,7 @@ export function isValidSite(state: WorldState, tile: TileIndex, campTile: TileIn
   const p = toPoint(tile, map.width)
   const camp = toPoint(campTile, map.width)
   const d = manhattan(p, camp)
-  if (d < SITE_MIN_CAMP_DISTANCE || d > SITE_MAX_CAMP_DISTANCE) return false
+  if (d < SITE_MIN_CAMP_DISTANCE || d > maxCampDistance) return false
   if (state.citizens.some((c) => c.alive && c.pos.x === p.x && c.pos.y === p.y)) return false
   for (const s of getShelters(state)) {
     const q = toPoint(s.tile, map.width)
@@ -155,6 +188,10 @@ export function isValidSite(state: WorldState, tile: TileIndex, campTile: TileIn
  * distance, then tile index. Null if none.
  */
 export function chooseSite(state: WorldState): TileIndex | null {
+  return chooseSiteWithin(state, SITE_MAX_CAMP_DISTANCE, SITE_MAX_WALK_STEPS) ?? chooseSiteWithin(state, SITE_OUTER_CAMP_DISTANCE, SITE_OUTER_WALK_STEPS)
+}
+
+function chooseSiteWithin(state: WorldState, maxDistance: number, maxSteps: number): TileIndex | null {
   const camp = getCampfire(state)
   if (!camp) return null
   const { map } = state
@@ -164,8 +201,8 @@ export function chooseSite(state: WorldState): TileIndex | null {
   const reachableCount = reachable.reduce((n, v) => n + v, 0)
 
   const candidates: TileIndex[] = []
-  for (let y = campPoint.y - SITE_MAX_CAMP_DISTANCE; y <= campPoint.y + SITE_MAX_CAMP_DISTANCE; y++) {
-    for (let x = campPoint.x - SITE_MAX_CAMP_DISTANCE; x <= campPoint.x + SITE_MAX_CAMP_DISTANCE; x++) {
+  for (let y = campPoint.y - maxDistance; y <= campPoint.y + maxDistance; y++) {
+    for (let x = campPoint.x - maxDistance; x <= campPoint.x + maxDistance; x++) {
       if (x < 0 || y < 0 || x >= map.width || y >= map.height) continue
       const tile = toIndex(x, y, map.width)
       if (reachable[tile] === 1) candidates.push(tile)
@@ -173,7 +210,7 @@ export function chooseSite(state: WorldState): TileIndex | null {
   }
   const walk = distanceField(map, camp.tile, (x) => map.discovered[x] === 1 && !solid.has(x))
   const steps = (t: TileIndex) => walk[t]!
-  const near = candidates.filter((t) => steps(t) >= 0 && steps(t) <= SITE_MAX_WALK_STEPS)
+  const near = candidates.filter((t) => steps(t) >= 0 && steps(t) <= maxSteps)
   near.sort(
     (a, b) =>
       steps(a) - steps(b) ||
@@ -181,7 +218,7 @@ export function chooseSite(state: WorldState): TileIndex | null {
       a - b,
   )
   for (const tile of near) {
-    if (isValidSite(state, tile, camp.tile, reachableCount)) return tile
+    if (isValidSite(state, tile, camp.tile, reachableCount, maxDistance)) return tile
   }
   return null
 }

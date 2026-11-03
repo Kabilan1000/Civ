@@ -1,6 +1,7 @@
 // Read-only helpers for the UI and renderer. Never mutate state here.
 import { FRIENDSHIP_AFFINITY, MAX_EVENTS, RIVALRY_AFFINITY, SHELTER_CAPACITY, type DayPhase } from './constants.ts'
 import { stepCost, toPoint } from './grid.ts'
+import { ageYears, lifeStage, type LifeStage } from './citizens/life.ts'
 import { dayNumberAt, dayPhaseAt, minuteOfDayAt, tickOfDayAt } from './systems/time.ts'
 import type {
   ActionKind,
@@ -79,6 +80,8 @@ export interface CivStats {
   friendships: number
   /** Unordered pairs of living citizens where EITHER affinity ≤ RIVALRY_AFFINITY. */
   rivalries: number
+  /** Population V1: living citizens by life stage, couples, and cumulative births and deaths. */
+  people: { children: number; adults: number; elders: number; couples: number; births: number; deaths: number; oldAgeDeaths: number }
 }
 
 /** Derived civilization snapshot (not stored in state). */
@@ -109,7 +112,7 @@ export function getCivStats(state: WorldState): CivStats {
   return {
     day: getDayNumber(state),
     population: n,
-    dead: state.citizens.length - n,
+    dead: state.population.counters.deaths, // all deaths, including the archived
     food: state.stockpile.food,
     wood: state.stockpile.wood,
     shelters: {
@@ -124,7 +127,36 @@ export function getCivStats(state: WorldState): CivStats {
     avgNeeds: { satiety: avg('satiety'), energy: avg('energy'), social: avg('social'), health: avg('health') },
     friendships,
     rivalries,
+    people: {
+      ...countStages(living, state.tick),
+      couples: living.filter((c) => c.partnerId !== null && c.partnerId > c.id).length,
+      births: state.population.counters.births,
+      deaths: state.population.counters.deaths,
+      oldAgeDeaths: state.population.counters.oldAgeDeaths,
+    },
   }
+}
+
+/** Living citizens by life stage. */
+export function countStages(living: readonly Citizen[], tick: number): { children: number; adults: number; elders: number } {
+  const out = { children: 0, adults: 0, elders: 0 }
+  for (const c of living) {
+    const stage = lifeStage(c, tick)
+    if (stage === 'child') out.children++
+    else if (stage === 'adult') out.adults++
+    else out.elders++
+  }
+  return out
+}
+
+/** A person's name — living, dead or archived — or "#id" if long forgotten. */
+export function getPersonName(state: WorldState, id: number): string {
+  return getCitizen(state, id)?.name ?? state.archive.find((p) => p.id === id)?.name ?? `#${id}`
+}
+
+/** True if the person (living or dead) is still in `citizens`; archived people are not linkable. */
+export function isListedCitizen(state: WorldState, id: number): boolean {
+  return getCitizen(state, id) !== undefined
 }
 
 // ── Citizen inspector ───────────────────────────────────────────────────────
@@ -155,12 +187,21 @@ export interface CitizenDetail {
   task: CitizenTaskView | null
   scores: ActionScore[]
   lastDecisionTick: number | null
+  /** Population V1 */
+  age: number
+  stage: LifeStage
+  bornTick: number
+  founder: boolean
+  parents: { id: number; name: string; listed: boolean }[]
+  partner: { id: number; name: string; listed: boolean } | null
+  children: { id: number; name: string; listed: boolean; alive: boolean }[]
 }
 
 export function getCitizenDetail(state: WorldState, id: number): CitizenDetail | null {
   const c = getCitizen(state, id)
   if (!c) return null
-  const name = (cid: number) => getCitizen(state, cid)?.name ?? `#${cid}`
+  const name = (cid: number) => getPersonName(state, cid)
+  const person = (pid: number) => ({ id: pid, name: getPersonName(state, pid), listed: isListedCitizen(state, pid) })
   const homeStructure = c.homeId === null ? undefined : getStructure(state, c.homeId)
   const t = c.task
   let task: CitizenTaskView | null = null
@@ -197,6 +238,13 @@ export function getCitizenDetail(state: WorldState, id: number): CitizenDetail |
     task,
     scores: c.lastScores.map((s) => ({ ...s })),
     lastDecisionTick: c.lastDecisionTick,
+    age: ageYears(c, state.tick),
+    stage: lifeStage(c, state.tick),
+    bornTick: c.bornTick,
+    founder: c.parentIds === null,
+    parents: (c.parentIds ?? []).map(person),
+    partner: c.partnerId === null ? null : person(c.partnerId),
+    children: c.childIds.map((cid) => ({ ...person(cid), alive: getCitizen(state, cid)?.alive ?? false })),
   }
 }
 
@@ -302,14 +350,14 @@ export function getMemories(state: WorldState, id: number): MemoryView[] {
     .sort((a, b) => b.tick - a.tick || b.id - a.id)
     .map((m) => ({
       ...m,
-      subjectName: m.subjectId === undefined ? null : (getCitizen(state, m.subjectId)?.name ?? `#${m.subjectId}`),
+      subjectName: m.subjectId === undefined ? null : getPersonName(state, m.subjectId),
       place: m.tile === undefined ? null : toPoint(m.tile, state.map.width),
     }))
 }
 
 // ── Events ──────────────────────────────────────────────────────────────────
 
-export type EventCategory = 'social' | 'construction' | 'exploration' | 'survival' | 'time'
+export type EventCategory = 'social' | 'family' | 'construction' | 'exploration' | 'survival' | 'time'
 
 export const EVENT_CATEGORIES: Readonly<Record<SimEventKind, EventCategory>> = {
   worldCreated: 'time',
@@ -326,6 +374,9 @@ export const EVENT_CATEGORIES: Readonly<Record<SimEventKind, EventCategory>> = {
   discovered: 'exploration',
   starving: 'survival',
   died: 'survival',
+  born: 'family',
+  cameOfAge: 'family',
+  partnered: 'family',
 }
 
 /**

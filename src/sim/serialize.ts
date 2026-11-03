@@ -3,6 +3,13 @@
 // full shape before handing back a WorldState.
 
 import {
+  ARCHIVE_MAX,
+  DAYS_PER_YEAR,
+  FOUNDER_AGE,
+  MAX_AGE,
+  MAX_OVERCROWD,
+  TICKS_PER_DAY,
+  TICKS_PER_YEAR,
   HISTORY_MAX,
   MAX_EVENTS,
   MAX_MEMORIES,
@@ -12,7 +19,7 @@ import {
   SHELTER_CAPACITY,
   TERRAINS,
 } from './constants.ts'
-import { assignMigratedAges } from './ecology/flora.ts'
+import { assignMigratedAges, fnv1a32 } from './ecology/flora.ts'
 import { seedRng } from './rng.ts'
 import type { TileMap, WorldState } from './types.ts'
 
@@ -104,6 +111,39 @@ const migrations: Record<number, Migration> = {
       },
     }
   },
+  // v6 → v7 (Population V1): every existing citizen is a founder-like adult
+  // aged FOUNDER_AGE (birthday spread over the year), derived from a hash of
+  // seed and id — no RNG state — with bornTick on a dawn. No families yet:
+  // parents, partner and children start empty. An empty archive and a
+  // population stream (seed#population@tick) with zero counters.
+  6: (data) => {
+    const tick = data.tick as number
+    const seed = String((data.config as Record<string, unknown>).seed)
+    const dayStart = tick - (tick % TICKS_PER_DAY)
+    const citizens = (data.citizens as Record<string, unknown>[]).map((c) => {
+      const h = fnv1a32(`${seed}:founder:${String(c.id)}`)
+      const years = FOUNDER_AGE.min + (h % (FOUNDER_AGE.max - FOUNDER_AGE.min + 1))
+      const dayOfYear = (h >>> 8) % DAYS_PER_YEAR
+      return {
+        ...c,
+        bornTick: dayStart - (years * DAYS_PER_YEAR + dayOfYear) * TICKS_PER_DAY,
+        parentIds: null,
+        partnerId: null,
+        childIds: [],
+        lastChildTick: null,
+      }
+    })
+    return {
+      ...data,
+      citizens,
+      archive: [],
+      population: {
+        rng: seedRng(`${seed}#population@${tick}`),
+        // Deaths that really happened before migration are counted (all were from needs).
+        counters: { births: 0, deaths: (data.citizens as Record<string, unknown>[]).filter((c) => c.alive === false).length, oldAgeDeaths: 0, partnerships: 0, comingOfAge: 0, archived: 0 },
+      },
+    }
+  },
 }
 
 export function serialize(state: WorldState): string {
@@ -192,14 +232,14 @@ const PLANT_STAGES = ['seedling', 'young', 'mature', 'old', 'dead'] as const
 const ACTION_KINDS = ['eat', 'forage', 'chop', 'deliver', 'share', 'build', 'rest', 'socialize', 'explore', 'wander', 'idle'] as const
 const STRUCTURE_KINDS = ['campfire', 'shelter'] as const
 const STRUCTURE_STAGES = ['planned', 'underConstruction', 'complete'] as const
-const DEATH_CAUSES = ['starvation', 'exhaustion'] as const
+const DEATH_CAUSES = ['starvation', 'exhaustion', 'oldAge'] as const
 const MEMORY_KINDS = [
   'foundResource', 'resourceDepleted', 'chat', 'argument',
-  'receivedFood', 'gaveFood', 'builtShelter', 'sawDeath', 'discovered',
+  'receivedFood', 'gaveFood', 'builtShelter', 'sawDeath', 'discovered', 'childBorn', 'partnered',
 ] as const
 const EVENT_KINDS = [
   'worldCreated', 'dayStarted', 'shelterStarted', 'shelterCompleted', 'shelterAbandoned', 'movedIn', 'chat', 'argument',
-  'sharedFood', 'discovered', 'starving', 'died', 'friendship', 'rivalry',
+  'sharedFood', 'discovered', 'starving', 'died', 'friendship', 'rivalry', 'born', 'cameOfAge', 'partnered',
 ] as const
 
 function validateWorld(d: Record<string, unknown>): asserts d is Record<string, unknown> & WorldState {
@@ -324,7 +364,7 @@ function validateWorld(d: Record<string, unknown>): asserts d is Record<string, 
       uniqueId(mem.id, `${mp}.id`)
       int(mem.tick, `${mp}.tick`, 0, d.tick as number)
       oneOf(mem.kind, MEMORY_KINDS, `${mp}.kind`)
-      if (mem.subjectId !== undefined) citizenRef(mem.subjectId, `${mp}.subjectId`)
+      if (mem.subjectId !== undefined) id(mem.subjectId, `${mp}.subjectId`) // may be archived
       if (mem.tile !== undefined) tile(mem.tile, `${mp}.tile`)
       num(mem.valence, `${mp}.valence`, -1, 1)
     })
@@ -339,6 +379,26 @@ function validateWorld(d: Record<string, unknown>): asserts d is Record<string, 
     const diedTick = nullable(c.diedTick, `${p}.diedTick`, (v, dp) => int(v, dp, 0))
     const cause = nullable(c.deathCause, `${p}.deathCause`, (v, cp) => oneOf(v, DEATH_CAUSES, cp))
     if (alive !== (diedTick === null) || alive !== (cause === null)) fail(`${p}`, 'alive, diedTick and deathCause to agree')
+    // Population V1
+    const born = int(c.bornTick, `${p}.bornTick`, -Infinity, d.tick as number)
+    if (alive && Math.floor(((d.tick as number) - born) / TICKS_PER_YEAR) > MAX_AGE) fail(`${p}.bornTick`, `a living age of at most ${MAX_AGE}`)
+    nullable(c.parentIds, `${p}.parentIds`, (v, pp) => {
+      const ps = arr(v, pp)
+      if (ps.length !== 2) fail(pp, 'two parent ids')
+      ps.forEach((x, j) => id(x, `${pp}[${j}]`))
+      return ps
+    })
+    arr(c.childIds, `${p}.childIds`).forEach((x, j) => id(x, `${p}.childIds[${j}]`))
+    nullable(c.lastChildTick, `${p}.lastChildTick`, (v, lp) => int(v, lp, 0, d.tick as number))
+    nullable(c.partnerId, `${p}.partnerId`, (v, pp) => {
+      const pid = id(v, pp)
+      if (pid === cid) fail(pp, 'someone else')
+      if (alive) {
+        const partner = (d.citizens as Record<string, unknown>[]).find((o) => isRecord(o) && o.id === pid)
+        if (!partner || partner.alive !== true || partner.partnerId !== cid) fail(pp, 'a living partner who has this citizen as partner')
+      }
+      return pid
+    })
     if (!alive && (c.task !== null || c.homeId !== null)) fail(`${p}`, 'dead citizens to have no task or home')
   })
 
@@ -357,7 +417,7 @@ function validateWorld(d: Record<string, unknown>): asserts d is Record<string, 
     int(s.lastWorkTick, `${p}.lastWorkTick`, 0)
     const residents = arr(s.residentIds, `${p}.residentIds`)
     residents.forEach((r, j) => id(r, `${p}.residentIds[${j}]`))
-    if (residents.length > SHELTER_CAPACITY) fail(`${p}.residentIds`, `at most ${SHELTER_CAPACITY} residents`)
+    if (residents.length > SHELTER_CAPACITY + MAX_OVERCROWD) fail(`${p}.residentIds`, `at most ${SHELTER_CAPACITY + MAX_OVERCROWD} residents`)
   })
 
   const stock = obj(d.stockpile, 'stockpile')
@@ -381,6 +441,29 @@ function validateWorld(d: Record<string, unknown>): asserts d is Record<string, 
   int(counters.seedsCast, 'ecology.counters.seedsCast', 0)
   int(counters.fallenFruitSprouts, 'ecology.counters.fallenFruitSprouts', 0)
 
+  // Population V1: archive of the long dead, population stream and counters
+  const archive = arr(d.archive, 'archive')
+  if (archive.length > ARCHIVE_MAX) fail('archive', `at most ${ARCHIVE_MAX} people`)
+  archive.forEach((raw, i) => {
+    const p = `archive[${i}]`
+    const r = obj(raw, p)
+    uniqueId(r.id, `${p}.id`)
+    str(r.name, `${p}.name`)
+    oneOf(r.role, ROLES, `${p}.role`)
+    const born = int(r.bornTick, `${p}.bornTick`, -Infinity, d.tick as number)
+    int(r.diedTick, `${p}.diedTick`, Math.max(0, born), d.tick as number)
+    oneOf(r.cause, DEATH_CAUSES, `${p}.cause`)
+    nullable(r.parentIds, `${p}.parentIds`, (v, pp) => arr(v, pp).map((x, j) => id(x, `${pp}[${j}]`)))
+    nullable(r.partnerId, `${p}.partnerId`, id)
+    arr(r.childIds, `${p}.childIds`).forEach((x, j) => id(x, `${p}.childIds[${j}]`))
+  })
+  const population = obj(d.population, 'population')
+  const popRng = arr(population.rng, 'population.rng')
+  if (popRng.length !== 4) fail('population.rng', '4 uint32 words')
+  popRng.forEach((w, i) => int(w, `population.rng[${i}]`, 0, 0xffff_ffff))
+  const pc = obj(population.counters, 'population.counters')
+  for (const k of ['births', 'deaths', 'oldAgeDeaths', 'partnerships', 'comingOfAge', 'archived']) int(pc[k], `population.counters.${k}`, 0)
+
   // History
   const history = arr(d.history, 'history')
   if (history.length > HISTORY_MAX) fail('history', `at most ${HISTORY_MAX} samples`)
@@ -393,6 +476,7 @@ function validateWorld(d: Record<string, unknown>): asserts d is Record<string, 
     lastSampleTick = t
     for (const k of ['population', 'food', 'wood', 'housed', 'capacity', 'discovered']) int(h[k], `${p}.${k}`, 0)
     for (const k of ['satiety', 'energy', 'health', 'social']) int(h[k], `${p}.${k}`, 0, 100)
+    for (const k of ['children', 'adults', 'elders', 'births', 'deaths']) if (h[k] !== undefined) int(h[k], `${p}.${k}`, 0)
   })
 
   // Events
