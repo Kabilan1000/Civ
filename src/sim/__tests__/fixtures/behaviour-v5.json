@@ -1,0 +1,131 @@
+{
+  "description": "Pre-M10b id-independent behaviour hashes. With plant senescence disabled (the M10b default), the v6 simulation must reproduce every hash.",
+  "sourceCommit": "864cc5bb3fbbb3bc6c94910306c7364799332e52",
+  "seeds": [
+    {
+      "seed": "little-worlds",
+      "checkpoints": [
+        {
+          "tick": 0,
+          "behaviour": "d55965f9e06abcbaf21d4a719dae651e033de29d7985dc696a1677103f6c1691"
+        },
+        {
+          "tick": 240,
+          "behaviour": "c2cd6b3fe02c5d91f8ef4b19b42fdc16a696117641fdbc761459b74e6b3ab53f"
+        },
+        {
+          "tick": 2880,
+          "behaviour": "e5d8eaacbb082519c8ec4d7f65e4374e1aa8f03ce0ec0f374250199406436c12"
+        },
+        {
+          "tick": 11520,
+          "behaviour": "305085d8cff31a8fc4f2627fb508efa9476f257cdd91d88003673601ea4d084c"
+        },
+        {
+          "tick": 28800,
+          "behaviour": "4cfb3985ebcf4b7fe6d59fa0c3f6187f93c726c4c5a3474fad5f1151ad7b306a"
+        }
+      ]
+    },
+    {
+      "seed": "m9-check",
+      "checkpoints": [
+        {
+          "tick": 0,
+          "behaviour": "c0a562d9ba900ed0845f4fd7495973a24a3dcfb9759b252e8d7d1027691d452e"
+        },
+        {
+          "tick": 240,
+          "behaviour": "155f89ac1f4c22f0398ce87c8034777a7bc6cca5e557ee5d528c8bd18f361ea9"
+        },
+        {
+          "tick": 2880,
+          "behaviour": "6dd2ef5e53a3542a44085081ce73d465817325db27643dfbe52ac6c73c30b762"
+        },
+        {
+          "tick": 11520,
+          "behaviour": "784c6ddad36ffbf591208b6d040984b66c3015cfa4a582ad68b1f55abe026737"
+        },
+        {
+          "tick": 28800,
+          "behaviour": "ebb7a1dd71ab2e33e57694c984e75c611237d05b77b5aabedb163515b98d3b06"
+        }
+      ]
+    },
+    {
+      "seed": "sweep-0",
+      "checkpoints": [
+        {
+          "tick": 0,
+          "behaviour": "80a2f5e0b63b5a0313705cd4097b0a6a40a4961dff610ad434b12ffe2ecbc712"
+        },
+        {
+          "tick": 240,
+          "behaviour": "b670a9138a235342b75807e7a7601297cf622f200436c0cb9da8c47faa6abe10"
+        },
+        {
+          "tick": 2880,
+          "behaviour": "0e8a3e9774736a20d5d8c646f7c2ea7ca374524eccb4e3032b5a2048e031f941"
+        },
+        {
+          "tick": 11520,
+          "behaviour": "8ed9826533c0faa4963a3d163ade61644e48174d75a62b088636dd0cab723d00"
+        },
+        {
+          "tick": 28800,
+          "behaviour": "5f98291e24c079f8bd8cc606dcddef53f822f894b374a122b5ab8b4b0c5965b2"
+        }
+      ]
+    },
+    {
+      "seed": "sweep-13",
+      "checkpoints": [
+        {
+          "tick": 0,
+          "behaviour": "26e4f58ff09d253d7f1ac13c708a20138d07a62ef2c30015973bbdbfcaeb679f"
+        },
+        {
+          "tick": 240,
+          "behaviour": "078c72b0395ecaefdf365e33a77c4165fa35e038d649db077eb9f78a68041c89"
+        },
+        {
+          "tick": 2880,
+          "behaviour": "6055ac0315d902e12e757e83affefd32265c3813e33662c96dab8f269a30976c"
+        },
+        {
+          "tick": 11520,
+          "behaviour": "1b439f4843bb9b18f052af9070f609251b474075a26cb1413a9369ccc5dd0bc2"
+        },
+        {
+          "tick": 28800,
+          "behaviour": "a999b6288d25644d4fb0fbdfd5da4611f821ca33512ba0864511256931c8496a"
+        }
+      ]
+    },
+    {
+      "seed": "golden-island",
+      "checkpoints": [
+        {
+          "tick": 0,
+          "behaviour": "dad095a96ef609c47b7a281134c9656890166f141abf2da15b92c3620250ccd5"
+        },
+        {
+          "tick": 240,
+          "behaviour": "8d1d1f6bff8cb4a2d2a0f37a0edd4a77d7c213d4db39078d6ef42894ed9549a7"
+        },
+        {
+          "tick": 2880,
+          "behaviour": "cd09fa9d653111ba11d0c6c73bc6a0d952f229d8b2b797459d67739de4a8ad63"
+        },
+        {
+          "tick": 11520,
+          "behaviour": "75bce6f51a958d2599f22bee29745ea1c5147132b567f638734ce7aedb9ab7e2"
+        },
+        {
+          "tick": 28800,
+          "behaviour": "ec7f4128d24d5a41c2d9f6542a45c77a17553b78e1f118ec0bd67ea439e3d7f0"
+        }
+      ]
+    }
+  ]
+}
