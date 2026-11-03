@@ -768,6 +768,13 @@ Engine tests live next to the code (`src/sim/**/*.test.ts`).
   affects the simulation. Headless software-GPU, 1280×800: M8 117 ms/frame
   at DPR 2 and 33 ms at DPR 1 → M9 16.7 ms (60 fps) at both, settling at
   0.75×. Real GPUs that hold 60 fps stay at full density.
+- **Browser soak (M9)**: 30.8 minutes at 10x (headless Chromium with a software GPU,
+  production build) reached day 385 with all 12 citizens alive, no page or console
+  errors, a frame median of 33.3 ms throughout and one resolution change (1 → 0.75 at 0.1 min).
+  The heap after forced GC stayed between 9.6 and 10.4 MB. The live DOM grows only until the
+  bounded panels fill: the event feed reaches 200 rows around day 49 (≈1,600
+  elements) and history reaches 600 samples around day 60. After that it holds steady at
+  ≈1,800–1,870 elements. The day-385 save was 156.7 KB.
 - React re-renders ≤ 5 Hz; Pixi updates only dynamic layers each frame.
 - If needed later, the sim can move to a Web Worker unchanged (it's pure).
 
