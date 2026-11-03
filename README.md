@@ -55,8 +55,8 @@ Then open http://localhost:5173.
 
 The village runs by itself. Things you can do:
 
-- **Control time** — Play/Pause, and 1×, 3× or 10× speed. One in-game day is
-  240 ticks; at 1× that is 48 seconds.
+- **Control time** — Play/Pause, and 1×, 3×, 10× or 100× speed. One in-game
+  day is 240 ticks; at 1× that is 48 seconds, at 100× about half a second.
 - **Inspect a citizen** — click them on the map, or a name anywhere in the
   panels. A gold ring follows them. The inspector has four tabs:
   - *Overview* — needs (satiety, energy, social, health), what they're doing
@@ -77,9 +77,16 @@ days; friendships form over the first weeks; arguments are common, lasting
 rivalries rare. Citizens die only if their health reaches zero — from
 starvation or exhaustion — which is rare with the current balance.
 
-**The clock.** Days begin at dawn (06:00), so a time after midnight such as
+**The calendar.** The clock shows the season, day and year — for example
+“Spring 3, Year 1 · 14:42” — with the world's absolute day beside it (and in
+its tooltip). A season lasts 12 days and a year has four seasons (48 days):
+Spring, Summer, Autumn, Winter. The event feed marks where each season began
+and the history charts show season lines. Seasons are only a calendar for
+now; they don't change the village yet.
+
+Days begin at dawn (06:00), so a time after midnight such as
 “Day 6 · 00:48 (late night)” still belongs to day 6 and comes after
-“Day 6 · 22:42”.
+“Day 6 · 22:42” — and the season and year turn over at dawn too.
 
 ## Saving and loading
 
@@ -114,7 +121,7 @@ asks first if there is unsaved progress, and never touches saved slots.
 | Key          | Action                                   |
 | ------------ | ---------------------------------------- |
 | `Space`      | Play / pause                             |
-| `1` `2` `3`  | Speed 1× / 3× / 10×                      |
+| `1` `2` `3` `4` | Speed 1× / 3× / 10× / 100×            |
 | `Esc`        | Close the topmost dialog, or deselect    |
 
 Shortcuts don't fire while you type in a text field or hold Ctrl/⌘/Alt, and

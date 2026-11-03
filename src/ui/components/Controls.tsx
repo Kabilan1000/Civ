@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import type { SimulationController, SimulationSnapshot } from '../../app/SimulationController.ts'
 import { SPEEDS } from '../../sim/index.ts'
-import { DAY_BOUNDARY_HINT } from '../format/text.ts'
+import { calendarHint, formatDate } from '../format/calendar.ts'
 import type { ConfirmRequest } from './Modal.tsx'
 
 const pad = (n: number) => String(n).padStart(2, '0')
@@ -69,8 +69,10 @@ function SeedRestart({ controller, unsaved, initialSeed, confirm, notify }: { co
 export function Controls({ controller, snapshot, onOpenSaves, confirm, notify }: Props) {
   return (
     <div className="controls" aria-label="Simulation controls">
-      <span className="clock" aria-live="off" data-testid="clock" title={DAY_BOUNDARY_HINT}>
-        Day {snapshot.day} · {pad(snapshot.hour)}:{pad(snapshot.minute)} · {snapshot.hour < 6 ? 'Late night' : PHASE_LABEL[snapshot.phase]}
+      <span className="clock" aria-live="off" data-testid="clock" title={calendarHint(snapshot.tick)}>
+        <span data-testid="clock-date">{formatDate(snapshot.tick)}</span> · {pad(snapshot.hour)}:{pad(snapshot.minute)} ·{' '}
+        {snapshot.hour < 6 ? 'Late night' : PHASE_LABEL[snapshot.phase]}
+        <span className="clock-day" data-testid="clock-day">Day {snapshot.day}</span>
       </span>
       <button
         className="primary"

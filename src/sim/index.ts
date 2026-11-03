@@ -8,4 +8,17 @@ export { serialize, deserialize, SaveError } from './serialize.ts'
 export type { SaveErrorCode } from './serialize.ts'
 export * from './selectors.ts'
 export { dayIndexAt, dayNumberAt, dayPhaseAt, isDayStart, minuteOfDayAt, tickOfDayAt } from './systems/time.ts'
+export {
+  calendarAt,
+  dayOfSeasonAt,
+  dayOfYearAt,
+  isSeasonStart,
+  isYearStart,
+  seasonAt,
+  seasonIndexAt,
+  seasonStartTickAt,
+  seasonStartsBetween,
+  yearAt,
+} from './calendar.ts'
+export type { CalendarDate } from './calendar.ts'
 export { toIndex, toPoint } from './grid.ts'

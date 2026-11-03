@@ -1,11 +1,11 @@
 // Keyboard shortcuts (UI only).
-//   Space  play / pause        1 / 2 / 3  speed 1x / 3x / 10x
+//   Space  play / pause        1 / 2 / 3 / 4  speed 1x / 3x / 10x / 100x
 //   Escape close the topmost dialog (handled by Modal), otherwise deselect
 // Shortcuts never fire while typing in a text field, with a modifier key held
 // (browser/OS shortcuts keep working), or — for Space — while a button, link
 // or other control has focus (Space activates that control instead).
 
-export type ShortcutAction = 'togglePause' | 'speed1' | 'speed3' | 'speed10' | 'deselect'
+export type ShortcutAction = 'togglePause' | 'speed1' | 'speed3' | 'speed10' | 'speed100' | 'deselect'
 
 export interface KeyInfo {
   key: string
@@ -37,5 +37,6 @@ export function shortcutFor(k: KeyInfo): ShortcutAction | null {
   if (k.key === '1') return 'speed1'
   if (k.key === '2') return 'speed3'
   if (k.key === '3') return 'speed10'
+  if (k.key === '4') return 'speed100'
   return null
 }

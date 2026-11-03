@@ -25,11 +25,26 @@ export const DAY_PHASES: readonly { phase: DayPhase; startTick: number }[] = [
   { phase: 'night', startTick: 170 }, // 23:00
 ]
 
+// ── Calendar (M10a) ──────────────────────────────────────────────────────────
+// Seasons and years are derived from `tick` (sim/calendar.ts): no stored
+// state, no events. Like days, they turn over at dawn (06:00).
+export type Season = 'spring' | 'summer' | 'autumn' | 'winter'
+/** In calendar order; tick 0 is Spring 1, Year 1. */
+export const SEASONS: readonly Season[] = ['spring', 'summer', 'autumn', 'winter']
+export const DAYS_PER_SEASON = 12
+/** 4 seasons × 12 days. */
+export const DAYS_PER_YEAR = DAYS_PER_SEASON * SEASONS.length
+export const TICKS_PER_SEASON = DAYS_PER_SEASON * TICKS_PER_DAY
+export const TICKS_PER_YEAR = DAYS_PER_YEAR * TICKS_PER_DAY
+
 /** Ticks per second of real time at 1x speed. Used by the app layer, never by sim logic. */
 export const BASE_TICKS_PER_SECOND = 5
 
 /** Supported simulation speed multipliers. */
-export const SPEEDS = [1, 3, 10] as const
+// 100x (500 ticks/s) added after M9 so seasons and ecology can be watched in a session.
+// The controller still caps each frame at MAX_TICKS_PER_FRAME, so on a slow device
+// 100x runs as fast as it can rather than falling behind.
+export const SPEEDS = [1, 3, 10, 100] as const
 export type Speed = (typeof SPEEDS)[number]
 
 // ── World ───────────────────────────────────────────────────────────────────

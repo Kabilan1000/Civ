@@ -7,12 +7,14 @@ describe('keyboard shortcuts', () => {
     expect(shortcutFor({ key: '1', targetTag: 'BODY' })).toBe('speed1')
     expect(shortcutFor({ key: '2', targetTag: 'BODY' })).toBe('speed3')
     expect(shortcutFor({ key: '3', targetTag: 'CANVAS' })).toBe('speed10')
+    expect(shortcutFor({ key: '4', targetTag: 'BODY' })).toBe('speed100')
+    expect(shortcutFor({ key: '5', targetTag: 'BODY' })).toBeNull()
     expect(shortcutFor({ key: 'Escape', targetTag: 'BODY' })).toBe('deselect')
     expect(shortcutFor({ key: 'x', targetTag: 'BODY' })).toBeNull()
   })
 
   it('never fires while typing or with modifier keys', () => {
-    for (const key of [' ', '1', '2', '3', 'Escape']) {
+    for (const key of [' ', '1', '2', '3', '4', 'Escape']) {
       expect(shortcutFor({ key, targetTag: 'INPUT' })).toBeNull()
       expect(shortcutFor({ key, targetTag: 'TEXTAREA' })).toBeNull()
       expect(shortcutFor({ key, targetTag: 'DIV', targetEditable: true })).toBeNull()

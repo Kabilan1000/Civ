@@ -73,7 +73,20 @@ Allowed imports (enforced by an architecture test, see §9):
   event is emitted with the new day number.
 - Day phases by tick-of-day: dawn `0–19` (06:00), day `20–139` (08:00),
   dusk `140–169` (20:00), night `170–239` (23:00–06:00, ≈29% of the day).
-- Speeds: base rate **5 ticks/s**; 1x = 5, 3x = 15, 10x = 50 ticks/s.
+- Speeds: base rate **5 ticks/s**; 1x = 5, 3x = 15, 10x = 50, 100x = 500
+  ticks/s. A frame runs at most `MAX_TICKS_PER_FRAME` (20) ticks, so 100x
+  needs ≥ 25 fps; below that it runs as fast as frames allow (the backlog is
+  dropped, never accumulated).
+- **Calendar (M10a, `sim/calendar.ts`):** 12-day seasons (Spring, Summer,
+  Autumn, Winter) and 48-day years; tick 0 = Spring 1, Year 1, 06:00. They
+  are **pure functions of `tick`** — no state, events or ids — and like days
+  they turn over at dawn, so late night still belongs to the previous day,
+  season and year. The UI shows the date in the clock (absolute day as a
+  secondary label and tooltip), season separators in the event feed and
+  season lines in the history charts, all derived from stored ticks. Adding
+  calendar *events* was rejected: events share the id counter, so they would
+  shift every later id and change saves (TDS §6.4). `golden.test.ts` pins
+  `serialize()` byte for byte to hashes recorded before M10a.
 
 ### 3.2 Determinism rules
 
@@ -648,7 +661,7 @@ history (so a tapped citizen's details are right under the map).
   to the opener on close; their mount effect runs once (`onClose` via a ref)
   — M9 fix: re-running it on every 5 Hz re-render pulled focus back to the
   dialog every 200 ms, breaking keyboard navigation inside it.
-- **Controls**: pause/resume, 1x/3x/10x, seed field (+ random seed) and
+- **Controls**: season/year clock, pause/resume, 1x/3x/10x/100x, seed field (+ random seed) and
   Restart, Save and Load (M8; `•` on Save marks unsaved progress).
 - **Dashboard** (`components/Dashboard.tsx`): population (and deaths), day &
   time, food, wood, housed/capacity with shelters built and building,
@@ -874,8 +887,9 @@ Each milestone is merged only when its "done when" holds and `npm test`,
 | **M7** | **UI** — dashboard, citizen inspector (incl. decision scores), event feed, click-to-select. | All panels live-update at ≤ 5 Hz without frame drops at 10x. |
 | **M8** | **Persistence & restart** — save slots, autosave, load, restart with seed, migrations scaffold, error handling. | Save → reload page → load resumes identical world; corrupt save handled. |
 | **M9** | **Balance & polish** — long-run sweep (`npm run sweep`), evidence-based tuning, construction loop fix, adaptive render resolution, keyboard shortcuts, accessibility, README. | Sweep invariants hold over 30 seeds × 30 days and 3 × 100 days; perf tests pass; browser soak at 10x has no errors. |
+| **M10a** | **World calendar** — pure season/year functions, clock, feed separators, chart season lines (all UI-derived); 100x speed. | `serialize()` byte-identical to pre-M10a golden hashes for 5 seeds × 5 checkpoints; calendar boundary tests. |
 
-All milestones M0–M9 are complete (the MVP).
+All milestones M0–M9 are complete (the MVP). M10a (Living World, calendar only) is complete; M10b–M10d are specified in `design/LIVING_WORLD_TDS.md`.
 
 ### Out of scope for the MVP
 

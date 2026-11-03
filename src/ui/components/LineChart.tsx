@@ -1,4 +1,5 @@
 import { useState, type PointerEvent } from 'react'
+import { layoutMarkers } from '../format/calendar.ts'
 
 export interface Series {
   label: string
@@ -15,7 +16,12 @@ interface Props {
   /** Fixed y maximum (e.g. 100 for percentages); otherwise derived from data. */
   yMax?: number
   unit?: string
+  /** Axis labels (short). */
   formatX: (tick: number) => string
+  /** Tooltip heading; defaults to formatX. */
+  formatTooltip?: (tick: number) => string
+  /** Season starts inside the span: `at` is a fractional sample index (see ui/format/calendar.ts). */
+  markers?: readonly { at: number; label: string; short: string }[]
 }
 
 const W = 320
@@ -31,7 +37,7 @@ function niceMax(v: number): number {
 }
 
 /** Lightweight SVG line chart: one axis, 2px lines, legend, crosshair tooltip. */
-export function LineChart({ title, ticks, series, yMax, unit = '', formatX }: Props) {
+export function LineChart({ title, ticks, series, yMax, unit = '', formatX, formatTooltip = formatX, markers = [] }: Props) {
   const [hover, setHover] = useState<number | null>(null)
   const n = ticks.length
   const max = yMax ?? niceMax(Math.max(1, ...series.flatMap((s) => s.values)))
@@ -40,6 +46,8 @@ export function LineChart({ title, ticks, series, yMax, unit = '', formatX }: Pr
   const x = (i: number) => M.left + (n <= 1 ? iw / 2 : (i / (n - 1)) * iw)
   const y = (v: number) => M.top + ih - (Math.max(0, Math.min(max, v)) / max) * ih
   const gridValues = [0, max / 2, max]
+  const seasonLines = layoutMarkers(markers.map((m) => ({ ...m, x: x(m.at) })), W - M.right)
+  const seasonsText = markers.length ? `. Seasons begin: ${markers.map((m) => m.label).join(', ')}` : ''
 
   const onMove = (e: PointerEvent<SVGSVGElement>) => {
     if (n === 0) return
@@ -65,13 +73,24 @@ export function LineChart({ title, ticks, series, yMax, unit = '', formatX }: Pr
         </span>
       </figcaption>
       <div className="chart-plot">
-        <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`${title}: ${series.map((s) => `${s.label} ${s.values.at(-1) ?? '—'}${unit}`).join(', ')}`} onPointerMove={onMove} onPointerLeave={() => setHover(null)}>
+        <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`${title}: ${series.map((s) => `${s.label} ${s.values.at(-1) ?? '—'}${unit}`).join(', ')}${seasonsText}`} onPointerMove={onMove} onPointerLeave={() => setHover(null)}>
           {gridValues.map((g) => (
             <g key={g}>
               <line x1={M.left} x2={W - M.right} y1={y(g)} y2={y(g)} className="grid" />
               <text x={M.left - 5} y={y(g) + 3} className="axis-label" textAnchor="end">
                 {Number.isInteger(g) ? g : g.toFixed(1)}
               </text>
+            </g>
+          ))}
+          {seasonLines.map((m) => (
+            <g key={m.label} className="season-marker">
+              <title>{`${m.label} begins`}</title>
+              <line x1={m.x} x2={m.x} y1={M.top} y2={M.top + ih} className="season-line" />
+              {m.labelled && (
+                <text x={m.x + 3} y={M.top + 8} className="season-label">
+                  {m.short}
+                </text>
+              )}
             </g>
           ))}
           {n > 0 && (
@@ -103,7 +122,7 @@ export function LineChart({ title, ticks, series, yMax, unit = '', formatX }: Pr
         </svg>
         {hover !== null && (
           <div className="tooltip" style={{ left: `${(x(hover) / W) * 100}%` }}>
-            <div className="tooltip-title num">{formatX(ticks[hover]!)}</div>
+            <div className="tooltip-title num">{formatTooltip(ticks[hover]!)}</div>
             {series.map((s) => (
               <div key={s.label} className="tooltip-row">
                 <span className="swatch" style={{ background: s.color }} aria-hidden />

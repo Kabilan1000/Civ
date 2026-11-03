@@ -1,4 +1,5 @@
 import type { SimulationSnapshot } from '../../app/SimulationController.ts'
+import { calendarHint, formatDate } from '../format/calendar.ts'
 import { Meter } from './Meter.tsx'
 
 const pad = (n: number) => String(n).padStart(2, '0')
@@ -21,8 +22,8 @@ export function Dashboard({ snapshot }: { snapshot: SimulationSnapshot }) {
     <section className="panel dashboard" aria-label="Civilization">
       <div className="panel-title-row">
         <h2>Civilization</h2>
-        <span className="muted num">
-          Day {snapshot.day} · {pad(snapshot.hour)}:{pad(snapshot.minute)} · {PHASE[snapshot.phase]}
+        <span className="muted num" title={calendarHint(snapshot.tick)}>
+          {formatDate(snapshot.tick)} · {pad(snapshot.hour)}:{pad(snapshot.minute)} · {snapshot.hour < 6 ? 'Late night' : PHASE[snapshot.phase]}
         </span>
       </div>
       <div className="stat-grid">

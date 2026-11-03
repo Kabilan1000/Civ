@@ -405,7 +405,7 @@ change gets a one-line reason next to the constant.
 | Dispersal | Each rejection rule in isolation; seasonal multiplier (no winter germination); fixed draw counts; same-dawn crowding order; safety cap enforced. |
 | Fallen fruit | A stripped bush leaves no sprouts. A full bush can. Berries count as decayed either way. All germination rules apply. |
 | Habitat | Table values, sand rule, shade, forest edge. |
-| Construction | A seedling tile can be chosen and is cleared. No germination inside the clearing. Dense-forest scenario still houses everyone. |
+| Construction | A seedling tile can be chosen and is cleared. No *germination* inside the clearing, while pre-existing plants there are kept and stay harvestable. Dense-forest scenario still houses everyone. |
 | AI | Seedlings never targeted; deadwood chopped; a plant vanishing mid-trip or mid-gather ends the task cleanly. |
 | **Collapse and recovery (controlled, deterministic)** | (1) An isolated patch of 4 bushes harvested daily by a scripted sandbox loop: none seed, and the patch dies within one lifetime. (2) The same patch with an unharvested bush ring within radius 3: once harvesting stops, the patch zone holds ≥ 2 fruiting bushes again within 20 days. (3) A neglected dying patch re-sprouts via fallen fruit. These test that the **mechanisms** work. |
 | Conservation | Extended identity checked every tick over 120 days on several seeds, and over the migration fixture. |
@@ -447,7 +447,7 @@ scarcity, local collapse or a rare death, are not bugs.
 |---|---|
 | H1 | Determinism: D1 (M10a) and D2–D4; save/resume exact at days 120 and 400. |
 | H2 | Conservation identity every tick, in every sweep run and the migration fixture. |
-| H3 | Bounds and invariants every tick: `0 ≤ amount ≤ max ≤ stage cap`; stage consistent with age; `dead` only for wood with `diedTick` set; no plant on water or rock, a structure, a planned site or inside the clearing; plant counts never above the safety cap; all M9 invariants. |
+| H3 | Bounds and invariants every tick: `0 ≤ amount ≤ max ≤ stage cap`; stage consistent with age; `dead` only for wood with `diedTick` set; no plant on water or rock, a structure tile or a planned site; **every germination** lands outside the clearing *at the moment it germinates* (checked on each birth; existing plants inside the clearing are valid, see §7.11); plant counts never above the safety cap; all M9 invariants. |
 | H4 | Germination never blocks housing: no rejected site because of a seedling (tested), and site selection behaviour is unchanged where no seedlings are present. |
 | H5 | Seed stability: D6 tick-0 hashes. |
 | H6 | Migration and initial ages: all fixtures load; for the age distribution alone, scheduled deaths on any dawn in the first 60 days are ≤ 10% of either kind. |
@@ -527,6 +527,72 @@ scarcity, local collapse or a rare death, are not bugs.
 - **History compatibility:** absent ecology fields render as gaps.
 - **Feed flooding:** no per-plant events. Calendar separators are not
   events.
+
+### 7.11 Issues recorded during M10a, for M10b
+
+**Issue 1 — finite lifespans before reproduction.** M10b adds aging and
+death; reproduction arrives only in M10c. A build containing M10b alone
+would let every plant die with no renewal. On these numbers bushes would be
+gone in about 44 days and trees in about 150. Decision for M10b:
+
+- Keep M10b and M10c as **separate development commits** with their own
+  tests, as approved.
+- **Gate plant death until M10c.** M10b ships stages, caps, aging, deadwood
+  sprites, the decay ledger and the v6 schema, with death **disabled by
+  default**: plants reach *old* and stay there.
+  - The gate is a field of an `EcologyRules` object passed to
+    `updateEcology`. Its defaults come from `sim/constants.ts`
+    (`PLANT_DEATH_ENABLED = false` in M10b), and tests pass rules with death
+    on to cover death, deadwood and rot.
+  - It is a code constant, not save state, so it never needs a migration.
+- M10c turns the default on in the same commit that adds seeding and fallen
+  fruit. The M10c sweep gates (§7.6) are the first run with both.
+- **No ecology build is released**, meaning the README, the playable page
+  and the default branch's demo, between M10b and M10c. The playable page
+  stays on M10a until M10c passes its gates.
+- Because M10b changes state (new fields, stage caps), the D1 golden test is
+  retired in M10b either way, as planned.
+
+**Issue 2 — existing resources inside the settlement clearing.** Measured
+on the v0.1 generator (33 seeds: `sweep-0…29`, `little-worlds`, `m9-check`,
+`golden-island`):
+
+| When | Seeds with plants within Manhattan 2 of a structure | Plants (bushes / trees) | Plants on a structure tile |
+|---|---|---|---|
+| Tick 0 (campfire only) | 28 / 33 | 30 / 33 in total (about 2 per seed) | 0 |
+| Day 30 (campfire + shelters) | 33 / 33 | 117 / 170 (about 9 per seed, about 51 units) | 0 |
+
+The plants are there at tick 0 because the generator clears only the camp
+tile. By day 30 there are more, because `chooseSite` requires only the
+*site* tile to be free, so shelters go up next to existing plants.
+
+Consequences for the specification, corrected above:
+
+- The clearing is a **germination rule only**. It is evaluated when a seed
+  or fallen fruit tries to germinate and is never a state invariant. H3 is
+  reworded so that each germination is checked at birth.
+- **Existing plants inside the clearing are valid.** They age, die, seed
+  and are harvested like any other. Validation never rejects them, the
+  v5→v6 migration leaves them untouched, and seed stability (D6) is
+  unaffected, because the tick-0 map keeps them.
+- Their seeds can land outside the clearing and germinate there. Seeds
+  landing inside are rejected. Over a plant lifetime the clearing therefore
+  empties naturally, with nothing removed by rule. A plant counts towards
+  crowding wherever it stands.
+- A new shelter's clearing may cover plants that were already there.
+  Nothing happens to them: germination simply stops near the new shelter.
+- Test (M10b/M10c): a world whose clearing already holds plants migrates,
+  validates and keeps them, and no birth ever lands inside any clearing that
+  existed at that tick.
+
+### 7.12 Note: 100× speed (added in M10a)
+
+At 100× (500 ticks/s) the M10 budget of 0.25 ms per tick costs about 12.5%
+of the main thread at 12 citizens. A dawn tick (≤ 2 ms) runs twice a second.
+The §6.3 budgets for larger populations (1.5 ms at 100 citizens) would
+exceed a frame at 100×, so the controller's per-frame cap (20 ticks) slows
+it down instead. This is acceptable, but it should be measured when
+populations grow (M13).
 
 ---
 

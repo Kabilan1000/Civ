@@ -41,6 +41,7 @@ describe('SimulationController', () => {
     [1, 5],
     [3, 15],
     [10, 50],
+    [100, 500],
   ] as const)('runs %ix speed at %i ticks per second', (speed, perSecond) => {
     const { fake, ctrl } = make()
     ctrl.setSpeed(speed)

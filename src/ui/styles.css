@@ -63,9 +63,10 @@ button { font: inherit; color: inherit; }
 .controls { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .clock {
   font-variant-numeric: tabular-nums; font-size: 0.875rem; padding: 4px 10px;
-  min-width: 11.5rem; text-align: center;
+  min-width: 11.5rem; text-align: center; white-space: nowrap;
   border: 1px solid var(--border); border-radius: 6px; background: var(--panel);
 }
+.clock-day { color: var(--muted); font-size: 0.75rem; margin-left: 8px; padding-left: 8px; border-left: 1px solid var(--border); }
 .segmented { display: inline-flex; }
 .segmented button { border-radius: 0; margin-left: -1px; }
 .segmented button:first-child { border-radius: 6px 0 0 6px; margin-left: 0; }
@@ -212,6 +213,13 @@ button { font: inherit; color: inherit; }
 .cat-exploration { --cat: var(--cat-exploration); } .cat-survival { --cat: var(--cat-survival); }
 .cat-time { --cat: var(--cat-time); }
 .event-time { color: var(--muted); font-size: 0.75rem; white-space: nowrap; }
+/* Season separator rows (M10a): derived from event ticks, not stored events. */
+.events li.season-sep {
+  display: flex; align-items: center; gap: 8px; grid-template-columns: none;
+  padding: 6px 0 4px; border-bottom: none;
+  color: var(--text-2); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600;
+}
+.events li.season-sep::before, .events li.season-sep::after { content: ''; flex: 1; height: 1px; background: var(--border-strong); }
 .feed-note { margin-top: 8px; }
 
 /* History charts */
@@ -228,6 +236,8 @@ button { font: inherit; color: inherit; }
 .chart .grid { stroke: #2c3641; stroke-width: 1; }
 .chart .axis-label { fill: var(--muted); font-size: 9px; }
 .chart .crosshair { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 2 2; }
+.chart .season-line { stroke: var(--border-strong); stroke-width: 1; stroke-dasharray: 3 3; }
+.chart .season-label { fill: var(--muted); font-size: 8px; letter-spacing: 0.04em; }
 .chart .marker { stroke: var(--panel); stroke-width: 2; }
 .tooltip {
   position: absolute; top: 0; transform: translateX(-50%); pointer-events: none; z-index: 2;

@@ -1,6 +1,7 @@
 import { memo, useMemo, useState } from 'react'
 import type { SimulationController } from '../../app/SimulationController.ts'
 import { HISTORY_INTERVAL, HISTORY_MAX, getHistory } from '../../sim/index.ts'
+import { formatCalendarTick, seasonMarkers } from '../format/calendar.ts'
 import { formatTick } from '../format/text.ts'
 import { LineChart } from './LineChart.tsx'
 
@@ -25,9 +26,12 @@ export const HistoryCharts = memo(function HistoryCharts({ controller, historyLe
   const data = useMemo(() => {
     const h = getHistory(state).slice(0, historyLength)
     const total = state.map.discovered.length
+    const ticks = h.map((s) => s.tick)
     return {
       samples: h,
-      ticks: h.map((s) => s.tick),
+      ticks,
+      // Season starts within the sampled span, derived from the sample ticks.
+      seasons: seasonMarkers(ticks),
       population: h.map((s) => s.population),
       housed: h.map((s) => s.housed),
       food: h.map((s) => s.food),
@@ -41,6 +45,7 @@ export const HistoryCharts = memo(function HistoryCharts({ controller, historyLe
   }, [state, historyLength])
 
   const formatX = (t: number) => formatTick(t).replace(' · ', ' ')
+  const common = { ticks: data.ticks, formatX, formatTooltip: formatCalendarTick, markers: data.seasons }
 
   return (
     <section className="panel history" aria-label="History">
@@ -69,7 +74,7 @@ export const HistoryCharts = memo(function HistoryCharts({ controller, historyLe
                 const idx = data.samples.length - 1 - i
                 return (
                   <tr key={s.tick}>
-                    <td className="num">{formatTick(s.tick)}</td>
+                    <td className="num" title={formatCalendarTick(s.tick)}>{formatTick(s.tick)}</td>
                     <td className="num">{s.population}</td>
                     <td className="num">{s.housed}/{s.capacity}</td>
                     <td className="num">{s.food}</td>
@@ -87,13 +92,12 @@ export const HistoryCharts = memo(function HistoryCharts({ controller, historyLe
         </div>
       ) : (
         <div className="charts">
-          <LineChart title="Population" ticks={data.ticks} formatX={formatX} series={[{ label: 'Living', color: S1, values: data.population }, { label: 'Housed', color: S2, values: data.housed }]} />
-          <LineChart title="Stockpile" ticks={data.ticks} formatX={formatX} series={[{ label: 'Food', color: S1, values: data.food }, { label: 'Wood', color: S2, values: data.wood }]} />
-          <LineChart title="Explored" ticks={data.ticks} formatX={formatX} yMax={100} unit="%" series={[{ label: 'Map discovered', color: S1, values: data.explored }]} />
+          <LineChart title="Population" {...common} series={[{ label: 'Living', color: S1, values: data.population }, { label: 'Housed', color: S2, values: data.housed }]} />
+          <LineChart title="Stockpile" {...common} series={[{ label: 'Food', color: S1, values: data.food }, { label: 'Wood', color: S2, values: data.wood }]} />
+          <LineChart title="Explored" {...common} yMax={100} unit="%" series={[{ label: 'Map discovered', color: S1, values: data.explored }]} />
           <LineChart
             title="Average needs"
-            ticks={data.ticks}
-            formatX={formatX}
+            {...common}
             yMax={100}
             series={[
               { label: 'Satiety', color: S1, values: data.satiety },

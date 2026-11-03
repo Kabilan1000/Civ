@@ -84,6 +84,7 @@ export default function App() {
       else if (action === 'speed1') controller.setSpeed(1)
       else if (action === 'speed3') controller.setSpeed(3)
       else if (action === 'speed10') controller.setSpeed(10)
+      else if (action === 'speed100') controller.setSpeed(100)
       else if (action === 'deselect') setSelection(null)
     }
     window.addEventListener('keydown', onKey)
@@ -120,7 +121,7 @@ export default function App() {
 
       <footer className="footer" aria-label="Keyboard shortcuts">
         <span><kbd>Space</kbd> play / pause</span>
-        <span><kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> speed 1× / 3× / 10×</span>
+        <span><kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> <kbd>4</kbd> speed 1× / 3× / 10× / 100×</span>
         <span><kbd>Esc</kbd> close dialog or deselect</span>
         <span className="muted">Click a citizen to inspect them</span>
       </footer>

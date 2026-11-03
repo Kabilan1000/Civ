@@ -186,23 +186,27 @@ M12. Constraints that review must respect:
 - The review must also decide whether citizen ages are shown in world years
   (48 days) at all, or in another unit.
 
-### 2.4 Time acceleration (M11) [proposed]
+### 2.4 Time acceleration
 
-- Add a **30×** speed (150 ticks/s, about 2% CPU at 12 citizens).
-- Add a **"seasons pass"** mode: the sim runs as many ticks as fit in about
+- **100× shipped with M10a** (user request; 500 ticks/s, about 7.5% of a
+  core at 12 citizens). This replaces the proposed 30× speed. The controller
+  runs at most 20 ticks per frame, so 100× needs about 25 fps or more; on
+  slower frames it runs as fast as frames allow and drops the backlog rather
+  than spiralling.
+- **M11 [proposed]:** a **"seasons pass"** mode: the sim runs as many ticks as fit in about
   6 ms per frame, with interpolation off. It can optionally auto-pause on
   chronicle events.
-- Both are needed before generations (M13) can be watched. Neither is part
-  of M10.
+- "Seasons pass" is still needed before generations (M13) can be watched.
+  It is not part of M10.
 
 ### 2.5 Observing change within sessions
 
-| What | Ticks | At 10× | At 30× | Seasons pass (est.) |
+| What | Ticks | At 10× | At 100× (at 25+ fps) | Seasons pass (est.) |
 |---|---|---|---|---|
-| A season | 2,880 | 58 s | 19 s | ~1–5 s |
-| A bush's life (~36 days) | 8,640 | 2.9 min | 58 s | ~3–15 s |
-| A pioneer tree's life (~120 days) | 28,800 | 9.6 min | 3.2 min | ~10–48 s |
-| One world year | 11,520 | 3.8 min | 1.3 min | ~4–19 s |
+| A season | 2,880 | 58 s | 5.8 s | ~1–5 s |
+| A bush's life (~36 days) | 8,640 | 2.9 min | 17 s | ~3–15 s |
+| A pioneer tree's life (~120 days) | 28,800 | 9.6 min | 58 s | ~10–48 s |
+| One world year | 11,520 | 3.8 min | 23 s | ~4–19 s |
 
 M10's ecology is fully observable at today's 10×. The timescales for
 citizen generations wait for the population review (§2.3).
@@ -346,6 +350,11 @@ reads them.
   structure, or on a planned site.
 - Shelter site selection may claim a seedling tile (it holds 0 units), so
   growth never blocks housing.
+- **Existing plants inside the clearing stay.** The clearing only blocks
+  *new* germination. v0.1 worlds already have plants there: on 28 of 33
+  measured seeds at tick 0, and on every seed by day 30, because shelters are
+  built next to plants. They are never removed, invalidated or migrated
+  away (TDS §7.11).
 - The ecology runs island-wide, including in the fog. Citizens still act
   only on discovered, reachable tiles.
 
@@ -580,7 +589,7 @@ Schema changes ship with migrations and fixtures.
 | **M10c — Dispersal, habitat, recovery** | Seeding with thresholds, habitat, crowding, clearing, safety cap, seasonal germination, fallen fruit. | Hard gates plus a controlled collapse-and-recovery scenario; balance report. |
 | **M10d — Ecology dashboard** | Ecology card, chart, forage-near-camp and nearest-ripe-bush metrics, sweep extensions (O1–O4). | All hard gates; balance targets met or explained; 30-min soak. |
 | *M10e — Wonder prototype (optional)* | Scatter Seeds behind a flag; playtest (§1.6). | Keep/kill decision; no schema change. |
-| **M11 — Seasons that matter, faster time** | Seasonal fruiting, winter stockpile behaviour, spoilage, tint, 30× and "seasons pass". | Balance: winters survivable under normal conditions; frame budget at 30×. |
+| **M11 — Seasons that matter, faster time** | Seasonal fruiting, winter stockpile behaviour, spoilage, tint, "seasons pass" (100× already shipped in M10a). | Balance: winters survivable under normal conditions; frame budget at 100×. |
 | **M12 — Life course (data and view)** | Population review outcome (timescales and terms); `bornTick` and stages; partners; households (data only); archive and chronicle; tile and family inspector. Natural death **off**. | v6→v7 migration; bounded chronicle. |
 | **M13 — Generations** | Births, children, natural death, §4.4 housing (headroom, overcrowding demand, household assignment), population cap, relationship cap, performance work. | Deadlock-freedom tests; population bounded; budget at 50 citizens. |
 | **M14 — Settlement wear** | Condition, repair, ruins, salvage, reconstruction, abandonment. | Wood conserved; housing recovers; budget at 100 citizens (headless). |
