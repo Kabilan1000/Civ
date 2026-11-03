@@ -117,6 +117,10 @@ Each tick runs systems in a fixed order:
 7. **social** — resolve conversations between adjacent citizens.
 8. **stats** — sample civilization metrics (every 24 ticks) for the dashboard.
 
+Implemented so far (M3): `time → decide → act` (`systems/time.ts`,
+`systems/decide.ts`, `systems/tasks.ts`). The other systems slot into the
+positions above as their milestones land.
+
 ### 3.5 Map
 
 - 36 × 24 tiles, stored as a flat array indexed `y * width + x`.
@@ -165,10 +169,21 @@ Each tick runs systems in a fixed order:
   the path's tiles.
 - `path/flood.ts`: reachability masks and region labelling for validation
   (and later for "can I get there at all?" checks).
-- A citizen moves **one adjacent tile at a time**: `path` + `pathIndex` +
-  `moveTicksLeft`. Never teleports. If the next tile becomes invalid, it
-  repaths. The renderer interpolates between `pos` and the next path node using
-  `moveTicksLeft` for smooth motion.
+- A citizen moves **one adjacent tile at a time** (`systems/movement.ts`):
+  `path` (A* convention), `pathIndex` (next tile to enter) and
+  `moveTicksLeft` (ticks until entering it). Entering a tile takes its step
+  cost in ticks. Before every step the next tile must still be passable and a
+  4-neighbour; otherwise the path is dropped and the task ends (the next
+  decision plans afresh). Paths are planned once when a task starts, never
+  recomputed mid-walk.
+- `getVisualPosition(state, citizen, alpha)` interpolates between `pos` and
+  the next path tile from step progress plus the controller's sub-tick
+  `alpha`, for smooth motion.
+- **Wander** (M3 placeholder behaviour, `ai/actions/wander.ts`): pick up to 8
+  random tiles within Manhattan 7 that are passable and discovered, path to the
+  first reachable one over *discovered tiles only* (`findPath` `canEnter`),
+  walk, linger 4–16 ticks, repeat. If nothing is found, retry in 5 ticks.
+  Task phases: `moveTo → linger`.
 - Citizens may share tiles (no collision in MVP).
 
 ### 3.7 Utility AI
@@ -367,21 +382,42 @@ Tuning numbers (decay rates, costs, thresholds, curve parameters) live in
 `SimulationController` (plain class, no React):
 
 - Holds `state`, `paused`, `speed`.
-- `requestAnimationFrame` loop with a **fixed-timestep accumulator**: converts
-  elapsed real time into whole ticks at the current speed, capped at
-  `MAX_TICKS_PER_FRAME` to avoid a spiral of death after tab switches.
-- Calls `renderer.render(state, alpha)` every frame.
-- Notifies subscribers at most ~5 Hz (and on pause/load/restart) by bumping a
-  snapshot version; React reads via `useSyncExternalStore` + selectors.
-- `restart(seed)`, `save(slot)`, `load(slot)`, `setSpeed(1|3|10)`, `togglePause()`.
+- **One** `requestAnimationFrame` loop drives both simulation and rendering;
+  `start()` is idempotent and `stop()` cancels the pending frame, so there are
+  never competing loops (React StrictMode start/stop/start is safe).
+- **Fixed-timestep accumulator**: elapsed real time → whole ticks at
+  `5 × speed` ticks/s. Spike protection: a frame counts at most 250 ms and runs
+  at most 20 ticks; any excess backlog is dropped.
+- Calls `renderer.render(state, alpha)` every frame, even while paused;
+  rendering never advances the simulation.
+- Publishes an immutable `SimulationSnapshot` (tick, day, clock, phase, paused,
+  speed) at most every 200 ms while running and immediately on control
+  changes; React reads it via `useSyncExternalStore` (`app/useSimulation.ts`).
+- The frame scheduler is injectable, so the loop is unit-tested in Node.
+- Done (M3): `setSpeed(1|3|10)`, `setPaused`, `togglePause`, `start/stop/dispose`,
+  `setRenderer/detachRenderer`. Planned (M8): `restart(seed)`, `save`, `load`.
 
 UI-only state (selected citizen, open panels) lives in React, not in the sim.
 
 ## 6. Rendering (PixiJS v8)
 
-- 24 px tiles → 864 × 576 canvas, scaled to fit with CSS.
-- Layers (containers): terrain (baked once into a texture; re-baked when
-  `map.version` changes), resources, structures, fog, citizens, selection/overlay.
+- 24 px tiles → an 864 × 576 world, scaled to fit the map element
+  (`render/layout.ts`); a `ResizeObserver` resizes the renderer and re-fits.
+- Layers: **static map** (terrain + resources + fog drawn as Graphics
+  off-stage and baked into one texture), structures, citizens. The bake is
+  redone only when the map object, `map.version` or the display scale
+  changes, so a normal frame draws one quad for the island. **Sim rule:** any
+  change to terrain, resources or `discovered` must increment `map.version`.
+- Citizens never stand in fog (they walk discovered tiles only), so fog sits
+  under them.
+- Pixi's own ticker is disabled (`autoStart: false`); the controller's loop
+  calls `app.render()`. Main-canvas MSAA is off: it doubled frame cost on
+  software-rendered GPUs, and the baked map is antialiased at bake time.
+- **Lifecycle** (`render/AppLifecycle.ts`): Pixi 8 initialises
+  asynchronously. The wrapper creates the app at most once, destroys it exactly
+  once, and if `dispose()` runs before init finishes (StrictMode unmount) it
+  destroys the app as soon as it is ready. `AppLifecycle.live` counts
+  undestroyed apps for leak tests.
 - Procedural shapes (Graphics) only in MVP — no asset pipeline.
 - Citizens: coloured by role, positions interpolated between tiles; small icon
   for current task; night tint over the scene from day phase.
@@ -483,7 +519,7 @@ little-worlds/
     │   │   ├── memory.ts
     │   │   └── relationships.ts
     │   ├── ai/
-    │   │   ├── curves.ts            # response curves
+    │   │   ├── curves.ts            # response curves (M4)
     │   │   ├── utility.ts           # scoring framework
     │   │   ├── decide.ts
     │   │   └── actions/             # one module per action: score + start + phases
@@ -491,17 +527,17 @@ little-worlds/
     │   │       └── rest.ts socialize.ts explore.ts wander.ts
     │   ├── systems/
     │   │   ├── time.ts  needs.ts  health.ts  resources.ts
+    │   │   ├── decide.ts            # M3: wander only; M4: utility AI
     │   │   └── tasks.ts movement.ts social.ts stats.ts
     │   └── __tests__/               # cross-cutting tests (determinism, invariants, arch, perf)
     ├── app/
-    │   ├── SimulationController.ts
-    │   └── useSimulation.ts
+    │   ├── SimulationController.ts  # loop, speed, pause, snapshots
+    │   └── useSimulation.ts         # React hook (useSyncExternalStore)
     ├── render/
-    │   ├── PixiRenderer.ts
-    │   ├── palette.ts
-    │   └── layers/
-    │       ├── terrainLayer.ts resourceLayer.ts structureLayer.ts
-    │       └── fogLayer.ts citizenLayer.ts overlayLayer.ts
+    │   ├── WorldRenderer.ts         # Pixi app, baked map, structures, citizens
+    │   ├── AppLifecycle.ts          # async init/destroy guard
+    │   ├── layout.ts                # fitWorld
+    │   └── palette.ts
     ├── persistence/
     │   └── storage.ts
     └── ui/

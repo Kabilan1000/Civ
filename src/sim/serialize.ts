@@ -178,8 +178,9 @@ function validateWorld(d: Record<string, unknown>): asserts d is Record<string, 
     const pos = obj(c.pos, `${p}.pos`)
     int(pos.x, `${p}.pos.x`, 0, width - 1)
     int(pos.y, `${p}.pos.y`, 0, height - 1)
-    arr(c.path, `${p}.path`).forEach((t, j) => tile(t, `${p}.path[${j}]`))
-    int(c.pathIndex, `${p}.pathIndex`, 0)
+    const path = arr(c.path, `${p}.path`)
+    path.forEach((t, j) => tile(t, `${p}.path[${j}]`))
+    int(c.pathIndex, `${p}.pathIndex`, 0, path.length)
     int(c.moveTicksLeft, `${p}.moveTicksLeft`, 0)
     nullable(c.task, `${p}.task`, (v, tp) => {
       const t = obj(v, tp)

@@ -1,7 +1,8 @@
 // Read-only helpers for the UI and renderer. Never mutate state here.
 import type { DayPhase } from './constants.ts'
+import { stepCost, toPoint } from './grid.ts'
 import { dayNumberAt, dayPhaseAt, minuteOfDayAt, tickOfDayAt } from './systems/time.ts'
-import type { Citizen, Needs, SimEvent, Structure, WorldState } from './types.ts'
+import type { Citizen, Needs, Point, SimEvent, Structure, WorldState } from './types.ts'
 
 export interface ClockTime {
   hour: number
@@ -68,4 +69,19 @@ export function getCivStats(state: WorldState): CivStats {
     wood: state.stockpile.wood,
     avgNeeds: { satiety: avg('satiety'), energy: avg('energy'), social: avg('social'), health: avg('health') },
   }
+}
+
+/**
+ * Fractional tile position for smooth rendering. `alpha` in [0, 1) is how far
+ * real time has progressed towards the next tick. While walking, the citizen
+ * is drawn between `pos` and the next path tile by elapsed step progress.
+ */
+export function getVisualPosition(state: WorldState, c: Citizen, alpha = 0): Point {
+  if (c.pathIndex >= c.path.length) return { x: c.pos.x, y: c.pos.y }
+  const nextTile = c.path[c.pathIndex]!
+  const cost = stepCost(state.map, nextTile)
+  if (cost === null || cost <= 0) return { x: c.pos.x, y: c.pos.y }
+  const t = Math.min(1, Math.max(0, (cost - c.moveTicksLeft + alpha) / cost))
+  const next = toPoint(nextTile, state.map.width)
+  return { x: c.pos.x + (next.x - c.pos.x) * t, y: c.pos.y + (next.y - c.pos.y) * t }
 }

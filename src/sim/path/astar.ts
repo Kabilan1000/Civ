@@ -7,8 +7,9 @@
 //     INCLUDING `goal`. Consecutive entries (and start → path[0]) are always
 //     4-neighbours, so a mover consumes one entry per step.
 //   • []          — start === goal (already there; nothing to do).
-//   • null        — no path: start or goal is out of range or impassable, the
-//     goal is unreachable, or the search exceeded maxExpansions.
+//   • null        — no path: start or goal is out of range or impassable (or
+//     rejected by options.canEnter), the goal is unreachable, or the search
+//     exceeded maxExpansions.
 //
 // Cost of a path = sum of stepCost() of every tile in it (the start tile is
 // free). Movement is 4-directional; water and rock are impassable.
@@ -33,6 +34,12 @@ const MIN_STEP_COST = Math.min(
 export interface FindPathOptions {
   /** Give up (return null) after expanding this many tiles. Default: whole map. */
   maxExpansions?: number
+  /**
+   * Extra restriction on which passable tiles may be entered (e.g. only
+   * discovered tiles). Applies to every path tile including the goal; the
+   * start tile is exempt.
+   */
+  canEnter?: (tile: TileIndex) => boolean
 }
 
 function validTile(map: TileMap, tile: TileIndex): boolean {
@@ -47,6 +54,8 @@ export function findPath(
 ): TileIndex[] | null {
   if (!validTile(map, start) || !validTile(map, goal)) return null
   if (start === goal) return []
+  const canEnter = options.canEnter
+  if (canEnter && !canEnter(goal)) return null
 
   const size = map.width * map.height
   const maxExpansions = options.maxExpansions ?? size
@@ -79,6 +88,7 @@ export function findPath(
 
     for (const next of neighbors4(map, current)) {
       if (closed[next]) continue
+      if (canEnter && !canEnter(next)) continue
       const cost = stepCost(map, next)
       if (cost === null) continue
       const tentative = g[current]! + cost

@@ -51,3 +51,30 @@ describe('architecture: src/sim purity', () => {
     expect(violations).toEqual([])
   })
 })
+
+describe('architecture: layer boundaries', () => {
+  const SRC = join(SIM_DIR, '..')
+  const filesIn = (layer: string) =>
+    (function walk(dir: string): string[] {
+      return readdirSync(dir).flatMap((name) => {
+        const path = join(dir, name)
+        if (statSync(path).isDirectory()) return walk(path)
+        return /\.tsx?$/.test(name) && !/\.test\.tsx?$/.test(name) ? [path] : []
+      })
+    })(join(SRC, layer))
+
+  it('render/ does not use React', () => {
+    for (const file of filesIn('render')) {
+      expect(readFileSync(file, 'utf8'), relative(SRC, file)).not.toMatch(/from\s+['"]react/)
+    }
+  })
+
+  it('other layers import the simulation only through sim/index.ts', () => {
+    for (const layer of ['app', 'render', 'ui', 'persistence']) {
+      for (const file of filesIn(layer)) {
+        const deep = readFileSync(file, 'utf8').match(/from\s+['"](\.\.\/)+sim\/(?!index\.ts['"])[^'"]*['"]/g)
+        expect(deep, relative(SRC, file)).toBeNull()
+      }
+    }
+  })
+})

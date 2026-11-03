@@ -6,6 +6,8 @@ import { allocateId } from './ids.ts'
 import { revealAround } from './map/discovery.ts'
 import { generateMap } from './map/generate.ts'
 import { seedRng } from './rng.ts'
+import { decide } from './systems/decide.ts'
+import { advanceTasks } from './systems/tasks.ts'
 import { advanceTime } from './systems/time.ts'
 import type { Structure, TileIndex, WorldConfig, WorldState } from './types.ts'
 
@@ -60,11 +62,13 @@ export function createWorld(overrides: Partial<WorldConfig> = {}): WorldState {
 
 /**
  * Advance the world by exactly one tick, mutating it in place.
- * System order is fixed (see docs/ARCHITECTURE.md §3.4); later milestones
- * add needs, health, resources, decide, act, social and stats after time.
+ * System order is fixed (see docs/ARCHITECTURE.md §3.4). Needs, health and
+ * resources (M4+) slot in between time and decide; social and stats after act.
  */
 export function step(state: WorldState): void {
   advanceTime(state)
+  decide(state)
+  advanceTasks(state)
 }
 
 export function stepN(state: WorldState, n: number): void {

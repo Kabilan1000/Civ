@@ -24,6 +24,8 @@ Full design: `docs/ARCHITECTURE.md` — read it before structural changes and ke
 8. **No external AI/network calls** in the MVP.
 9. **Tuning numbers live in `sim/constants.ts`**, not inline.
 10. **Event text is formatted in the UI**; sim events are structured data.
+11. **Bump `map.version`** whenever terrain, resources or `discovered` change — the renderer only re-bakes the map when it does.
+12. **Other layers import the sim only via `src/sim/index.ts`.** `render/` never imports React. One rAF loop (the `SimulationController`) drives simulation and rendering.
 
 ## Working style
 

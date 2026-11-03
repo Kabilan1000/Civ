@@ -114,4 +114,16 @@ export const DECISION_INTERVAL = 10
 /** Personality traits are rounded to this many decimal places at creation. */
 export const TRAIT_PRECISION = 100
 
+// ── Wandering (M3 placeholder behaviour until the utility AI in M4) ─────────
+
+/** Wander destinations are picked within this Manhattan distance of the citizen. */
+export const WANDER_RADIUS = 7
+/** Random destination picks tried per decision before giving up for now. */
+export const WANDER_MAX_TRIES = 8
+/** Ticks to linger at a destination before choosing the next one (inclusive range). */
+export const WANDER_PAUSE_MIN = 4
+export const WANDER_PAUSE_MAX = 16
+/** Ticks to wait before trying again when no destination could be found. */
+export const WANDER_RETRY_TICKS = 5
+
 export const INITIAL_STOCKPILE: Readonly<Stockpile> = { food: 20, wood: 0 }
