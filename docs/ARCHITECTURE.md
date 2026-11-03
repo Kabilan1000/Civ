@@ -117,9 +117,9 @@ Each tick runs systems in a fixed order:
 7. **social** — resolve conversations between adjacent citizens.
 8. **stats** — sample civilization metrics (every 24 ticks) for the dashboard.
 
-Implemented so far (M6 — unchanged order; social and exploration run inside
-decide/act): `time → needs (incl. health, death) → resources →
-construction → decide → act` (`systems/time.ts`, `needs.ts`, `death.ts`,
+Implemented so far (M7 — social and exploration run inside decide/act):
+`time → needs (incl. health, death) → resources → construction → decide →
+act → history` (`systems/time.ts`, `needs.ts`, `death.ts`,
 `resources.ts`, `construction.ts`, `decide.ts`, `tasks.ts`). The other systems slot into the
 positions above as their milestones land.
 
@@ -390,8 +390,34 @@ Memories influence decisions for 480 ticks.
 ### 3.11 Events
 
 Structured events (`{ id, tick, kind, citizenIds, data }`) appended to a ring
-buffer (cap 200) in state. Text is formatted in the UI (`ui/format/`), keeping
-state small and the sim free of presentation.
+buffer (cap 200) in state. Text is formatted in the UI (`ui/format/text.ts`),
+keeping state small and the sim free of presentation. Each kind maps to a
+category (`selectors.EVENT_CATEGORIES`: social, construction, exploration,
+survival, time); `getEvents(state, categories?)` returns the stored buffer
+newest first. Plain chats are memories, not events.
+
+### 3.12b History (M7, `systems/history.ts`)
+
+A genuine snapshot is recorded at tick 0 and at the end of every tick that is
+a multiple of `HISTORY_INTERVAL` (24 ticks = 10 per day); at most
+`HISTORY_MAX` (600 = 60 days) are kept, oldest dropped first. Averages are
+over the living, rounded to integers, so samples are compact and exactly
+reproducible. Nothing is back-filled: a save migrated from v4 starts with an
+empty history and records from its next interval.
+
+### 3.13 Read-only selectors (M7, `sim/selectors.ts`)
+
+`getCivStats` (population, dead, stockpile, shelters by stage, housing
+capacity/occupied/homeless, explored %, average needs, friendships = mutual
+affinity ≥ 50, rivalries = either side ≤ −40, living pairs only),
+`getCitizenDetail`, `explainDecision` (facts only: decision tick, top and
+runner-up scores, current task, and whether it is *persisted* — started
+before the decision and kept by `SWITCH_MARGIN` — *fellBack* — started at
+the decision because the top action could not start — or *recruited* into
+someone's conversation), `getRelationships` (from the inspected citizen's
+side, with the other side's affinity alongside), `getMemories` (newest
+first), `getEvents`, `getHistory`. All pure; tested to leave the world
+byte-identical.
 
 ---
 
@@ -495,10 +521,10 @@ interface SimEvent {
   citizenIds: number[]; data?: Record<string, number | string>;
 }
 
-// Civilization stats (day, population, housed, food, wood, avgNeeds) are
-// DERIVED by selectors.getCivStats(), not stored, so they can never go stale.
-// The dashboard history series is added to state with the stats system (M7)
-// together with a schema migration.
+// Civilization stats are DERIVED by selectors.getCivStats(), not stored, so
+// they can never go stale. Only the bounded history series is stored (M7):
+// history: HistorySample[] — { tick, population, food, wood, housed,
+//   capacity, discovered, satiety, energy, health, social } (integers)
 
 interface WorldConfig {
   seed: string;
@@ -597,12 +623,42 @@ UI-only state (selected citizen, open panels) lives in React, not in the sim.
 
 ## 7. UI (React)
 
-- **Controls**: pause/resume, 1x/3x/10x, seed input + restart, save/load slots.
-- **Dashboard**: day & time, population, housed, food/wood, average needs,
-  small history sparkline.
-- **Citizen inspector**: name, role, personality bars, needs bars, current task
-  and *why* (`lastScores`), carrying, home, relationships (sorted), memories.
-- **Event feed**: newest first, click a citizen name to inspect.
+Layout: top bar (title, clock, controls); the map with the event feed and
+history below it; a right sidebar with the dashboard and inspector. Below
+980 px it becomes one column ordered map → dashboard/inspector → feed →
+history (so a tapped citizen's details are right under the map).
+
+- **Controls**: pause/resume, 1x/3x/10x (seed/restart/save/load stay
+  disabled until M8).
+- **Dashboard** (`components/Dashboard.tsx`): population (and deaths), day &
+  time, food, wood, housed/capacity with shelters built and building,
+  explored %, friendships · rivalries, average satiety/energy/health/social
+  meters. Fed by `snapshot.stats` (≤ 5 Hz).
+- **Citizen inspector** (`components/Inspector.tsx`): empty state with a
+  roster; then tabs — *Overview* (needs, task + destination, position,
+  carrying, home + housemates, personality), *Decision* (sentences from
+  `explainDecision` + all recorded scores, current task highlighted),
+  *Bonds* (directional affinity both ways + familiarity, sort toggle),
+  *Memories* (newest first, with day/time and tick).
+- **Event feed** (`components/EventFeed.tsx`): the stored buffer newest
+  first with day/time, category dot and label, clickable citizen names,
+  category filter chips; states plainly that only the last 200 are kept.
+- **History** (`components/HistoryCharts.tsx`, `LineChart.tsx`): four small
+  multiples (population/housed, food/wood, explored %, average needs), plain
+  SVG, one axis each, 2px lines, legend with current values, crosshair
+  tooltip, and a table view. Colours: the dataviz reference palette's dark
+  categorical slots in fixed order (`--series-1..4`), validated on the panel
+  surface.
+- **Selection** (UI state in `App`): click a citizen on the map
+  (`render/selection.ts` hit-tests the positions drawn last frame, so it is
+  exact while they move) or a name anywhere; a gold ring follows them; click
+  empty ground or × to deselect. Dead citizens stay inspectable (no ring).
+  The renderer's canvas listeners are removed in `destroy()`.
+- Re-render cost: panels update at ≤ 5 Hz from the snapshot; the feed and
+  charts memoise on `lastEventId` / `historyLength`. Measured: +≈2% main
+  thread at 10x vs M6; frame time unchanged.
+- Dev builds expose `window.__littleWorlds` (the controller) for automated
+  browser checks; it is stripped from production builds.
 
 ## 8. Persistence
 

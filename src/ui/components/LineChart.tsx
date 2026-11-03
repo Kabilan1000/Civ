@@ -1,0 +1,119 @@
+import { useState, type PointerEvent } from 'react'
+
+export interface Series {
+  label: string
+  /** CSS colour (a categorical slot variable). */
+  color: string
+  values: number[]
+}
+
+interface Props {
+  title: string
+  /** X values (ticks), one per sample. */
+  ticks: number[]
+  series: Series[]
+  /** Fixed y maximum (e.g. 100 for percentages); otherwise derived from data. */
+  yMax?: number
+  unit?: string
+  formatX: (tick: number) => string
+}
+
+const W = 320
+const H = 132
+const M = { top: 8, right: 10, bottom: 18, left: 30 }
+
+/** "Nice" round maximum for an axis. */
+function niceMax(v: number): number {
+  if (v <= 0) return 1
+  const p = 10 ** Math.floor(Math.log10(v))
+  for (const m of [1, 2, 2.5, 5, 10]) if (m * p >= v) return m * p
+  return 10 * p
+}
+
+/** Lightweight SVG line chart: one axis, 2px lines, legend, crosshair tooltip. */
+export function LineChart({ title, ticks, series, yMax, unit = '', formatX }: Props) {
+  const [hover, setHover] = useState<number | null>(null)
+  const n = ticks.length
+  const max = yMax ?? niceMax(Math.max(1, ...series.flatMap((s) => s.values)))
+  const iw = W - M.left - M.right
+  const ih = H - M.top - M.bottom
+  const x = (i: number) => M.left + (n <= 1 ? iw / 2 : (i / (n - 1)) * iw)
+  const y = (v: number) => M.top + ih - (Math.max(0, Math.min(max, v)) / max) * ih
+  const gridValues = [0, max / 2, max]
+
+  const onMove = (e: PointerEvent<SVGSVGElement>) => {
+    if (n === 0) return
+    const rect = e.currentTarget.getBoundingClientRect()
+    const px = ((e.clientX - rect.left) / rect.width) * W
+    const i = n <= 1 ? 0 : Math.round(((px - M.left) / iw) * (n - 1))
+    setHover(Math.max(0, Math.min(n - 1, i)))
+  }
+  const shown = hover ?? n - 1
+
+  return (
+    <figure className="chart">
+      <figcaption>
+        <span className="chart-title">{title}</span>
+        <span className="legend">
+          {series.map((s) => (
+            <span key={s.label} className="legend-item">
+              <span className="swatch" style={{ background: s.color }} aria-hidden />
+              {s.label}
+              {n > 0 && <span className="num legend-value">{s.values[shown]}{unit}</span>}
+            </span>
+          ))}
+        </span>
+      </figcaption>
+      <div className="chart-plot">
+        <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`${title}: ${series.map((s) => `${s.label} ${s.values.at(-1) ?? '—'}${unit}`).join(', ')}`} onPointerMove={onMove} onPointerLeave={() => setHover(null)}>
+          {gridValues.map((g) => (
+            <g key={g}>
+              <line x1={M.left} x2={W - M.right} y1={y(g)} y2={y(g)} className="grid" />
+              <text x={M.left - 5} y={y(g) + 3} className="axis-label" textAnchor="end">
+                {Number.isInteger(g) ? g : g.toFixed(1)}
+              </text>
+            </g>
+          ))}
+          {n > 0 && (
+            <>
+              <text x={M.left} y={H - 4} className="axis-label">{formatX(ticks[0]!)}</text>
+              <text x={W - M.right} y={H - 4} className="axis-label" textAnchor="end">{formatX(ticks[n - 1]!)}</text>
+            </>
+          )}
+          {series.map((s) => (
+            <polyline
+              key={s.label}
+              points={s.values.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' ')}
+              fill="none"
+              stroke={s.color}
+              strokeWidth={2}
+              strokeLinejoin="round"
+              strokeLinecap="round"
+              vectorEffect="non-scaling-stroke"
+            />
+          ))}
+          {hover !== null && (
+            <g>
+              <line x1={x(hover)} x2={x(hover)} y1={M.top} y2={M.top + ih} className="crosshair" />
+              {series.map((s) => (
+                <circle key={s.label} cx={x(hover)} cy={y(s.values[hover]!)} r={4} fill={s.color} className="marker" />
+              ))}
+            </g>
+          )}
+        </svg>
+        {hover !== null && (
+          <div className="tooltip" style={{ left: `${(x(hover) / W) * 100}%` }}>
+            <div className="tooltip-title num">{formatX(ticks[hover]!)}</div>
+            {series.map((s) => (
+              <div key={s.label} className="tooltip-row">
+                <span className="swatch" style={{ background: s.color }} aria-hidden />
+                <span>{s.label}</span>
+                <span className="num">{s.values[hover]}{unit}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </figure>
+  )
+}

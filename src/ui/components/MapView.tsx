@@ -2,8 +2,28 @@ import { useEffect, useRef } from 'react'
 import type { SimulationController } from '../../app/SimulationController.ts'
 import type { WorldRenderer } from '../../render/WorldRenderer.ts'
 
-export function MapView({ controller, aspect }: { controller: SimulationController; aspect: string }) {
+interface Props {
+  controller: SimulationController
+  aspect: string
+  selectedId: number | null
+  onSelect: (id: number | null) => void
+}
+
+export function MapView({ controller, aspect, selectedId, onSelect }: Props) {
   const ref = useRef<HTMLDivElement>(null)
+  const rendererRef = useRef<WorldRenderer | null>(null)
+  // Latest selection callback/id, read by the renderer without re-creating it.
+  const onSelectRef = useRef(onSelect)
+  const selectedRef = useRef(selectedId)
+
+  useEffect(() => {
+    onSelectRef.current = onSelect
+  }, [onSelect])
+
+  useEffect(() => {
+    selectedRef.current = selectedId
+    rendererRef.current?.setSelected(selectedId)
+  }, [selectedId])
 
   useEffect(() => {
     const host = ref.current
@@ -17,14 +37,19 @@ export function MapView({ controller, aspect }: { controller: SimulationControll
         mount.renderer = r
         const ready = await r.init()
         // A StrictMode/unmount cleanup may have destroyed it while initialising.
-        if (ready && !r.isDestroyed) controller.setRenderer(r)
+        if (!ready || r.isDestroyed) return
+        r.setSelected(selectedRef.current)
+        r.onPick((id) => onSelectRef.current(id))
+        rendererRef.current = r
+        controller.setRenderer(r)
       })
       .catch((err: unknown) => console.error('Renderer failed to initialise', err))
     return () => {
       mount.unmounted = true
       if (mount.renderer) {
         controller.detachRenderer(mount.renderer)
-        mount.renderer.destroy()
+        mount.renderer.destroy() // also removes its canvas listeners
+        if (rendererRef.current === mount.renderer) rendererRef.current = null
       }
     }
   }, [controller])

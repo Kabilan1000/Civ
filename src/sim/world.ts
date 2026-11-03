@@ -8,6 +8,7 @@ import { generateMap } from './map/generate.ts'
 import { seedRng } from './rng.ts'
 import { updateConstruction } from './systems/construction.ts'
 import { decide } from './systems/decide.ts'
+import { recordHistory, recordSample } from './systems/history.ts'
 import { updateNeeds } from './systems/needs.ts'
 import { regrowResources } from './systems/resources.ts'
 import { advanceTasks } from './systems/tasks.ts'
@@ -53,11 +54,13 @@ export function createWorld(overrides: Partial<WorldConfig> = {}): WorldState {
     structures: [],
     stockpile: { ...INITIAL_STOCKPILE },
     ledger: { foodGathered: 0, woodGathered: 0, foodRegrown: 0, woodRegrown: 0, foodEaten: 0, foodLost: 0, woodLost: 0 },
+    history: [],
     events: [],
   }
 
   state.structures.push(createCampfire(allocateId(state), campTile))
   state.citizens = createCitizens(state, campTile)
+  recordSample(state) // tick 0
   pushEvent(state, 'worldCreated', state.citizens.map((c) => c.id), {
     seed: config.seed,
     mapAttempt: attempt,
@@ -69,7 +72,7 @@ export function createWorld(overrides: Partial<WorldConfig> = {}): WorldState {
 /**
  * Advance the world by exactly one tick, mutating it in place.
  * System order is fixed (see docs/ARCHITECTURE.md §3.4):
- * time → needs (incl. health, death) → resources → construction → decide → act.
+ * time → needs (incl. health, death) → resources → construction → decide → act → history.
  * Social and stats systems (M6/M7) will follow act.
  */
 export function step(state: WorldState): void {
@@ -79,6 +82,7 @@ export function step(state: WorldState): void {
   updateConstruction(state)
   decide(state)
   advanceTasks(state)
+  recordHistory(state)
 }
 
 export function stepN(state: WorldState, n: number): void {

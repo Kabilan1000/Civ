@@ -10,6 +10,10 @@
 //   structures  rebuilt when their summary changes (stage, wood, progress)
 //   citizens    one small Container each, repositioned every frame
 //   lights      campfire glow and lit shelter windows, additive blend
+// Selection (M7): the UI passes a selected id in (setSelected) and gets clicks
+// back (onPick). Hit testing uses the positions drawn in the last frame, so it
+// is exact while citizens move; it never touches simulation state. The ring
+// follows the selected citizen; dead or missing citizens simply show no ring.
 // Citizens carry a tiny speech-bubble badge while talking/listening/giving,
 // and briefly afterwards tinted by what happened (from their latest memory):
 // white chat, red argument, pink food shared. Fog reveals from exploration
@@ -40,7 +44,8 @@ import { AppLifecycle } from './AppLifecycle.ts'
 import { BakedLayer } from './BakedLayer.ts'
 import { ResourceSprites } from './ResourceSprites.ts'
 import { lightingAt } from './daylight.ts'
-import { fitWorld } from './layout.ts'
+import { fitWorld, type WorldFit } from './layout.ts'
+import { pickCitizen, screenToWorld, type RenderedCitizen } from './selection.ts'
 import { COLORS, ROLE_COLORS, TERRAIN_COLORS, TILE_SIZE, shade, tileNoise } from './palette.ts'
 
 interface CitizenView {
@@ -52,6 +57,9 @@ interface CitizenView {
   asleep: boolean
   bubbleTint: number | null
 }
+
+/** Click tolerance around a citizen's centre, in world pixels. */
+const PICK_RADIUS = 11
 
 /** Ticks a post-interaction bubble lingers. */
 const BUBBLE_AFTERGLOW_TICKS = 12
@@ -113,7 +121,14 @@ export class WorldRenderer implements FrameRenderer {
   private readonly structures = new Container()
   private readonly citizens = new Container()
   private readonly lights = new Container()
+  private readonly selectionRing = new Graphics()
   private readonly citizenViews = new Map<number, CitizenView>()
+  private readonly renderedCitizens: RenderedCitizen[] = []
+  private fit: WorldFit = { scale: 1, x: 0, y: 0 }
+  private selectedId: number | null = null
+  private hoverId: number | null = null
+  private pickListener: ((id: number | null) => void) | null = null
+  private canvas: HTMLCanvasElement | null = null
   private readonly fireGlows: Graphics[] = []
   private lastTint = -1
 
@@ -127,7 +142,44 @@ export class WorldRenderer implements FrameRenderer {
     this.parent = parent
     this.mapLayer.source.addChild(this.terrain, this.fog)
     this.lights.blendMode = 'add'
-    this.world.addChild(this.mapLayer.sprite, this.resources.container, this.structures, this.citizens, this.lights)
+    this.selectionRing
+      .circle(0, 0, 10.5)
+      .stroke({ width: 2, color: COLORS.selection })
+      .circle(0, 0, 13)
+      .stroke({ width: 1, color: COLORS.selection, alpha: 0.45 })
+    this.selectionRing.visible = false
+    this.world.addChild(
+      this.mapLayer.sprite, this.resources.container, this.structures, this.selectionRing, this.citizens, this.lights,
+    )
+  }
+
+  /** Highlight a citizen (UI state; never written into the simulation). */
+  setSelected(id: number | null): void {
+    this.selectedId = id
+  }
+
+  /** Called with the clicked citizen's id, or null for a click on empty ground. */
+  onPick(listener: ((id: number | null) => void) | null): void {
+    this.pickListener = listener
+  }
+
+  private citizenAt(event: PointerEvent): number | null {
+    if (!this.canvas) return null
+    const rect = this.canvas.getBoundingClientRect()
+    const p = screenToWorld(this.fit, event.clientX - rect.left, event.clientY - rect.top)
+    return pickCitizen(this.renderedCitizens, p.x, p.y, PICK_RADIUS)
+  }
+
+  private readonly handlePointerDown = (event: PointerEvent): void => {
+    if (event.button !== 0) return
+    this.pickListener?.(this.citizenAt(event))
+  }
+
+  private readonly handlePointerMove = (event: PointerEvent): void => {
+    const id = this.citizenAt(event)
+    if (id === this.hoverId || !this.canvas) return
+    this.hoverId = id
+    this.canvas.style.cursor = id === null ? 'default' : 'pointer'
   }
 
   /** Resolves true when ready, false if destroyed before initialisation finished. */
@@ -136,7 +188,11 @@ export class WorldRenderer implements FrameRenderer {
     if (!handle) return false
     const { app } = handle
     app.canvas.classList.add('map-canvas')
+    app.canvas.setAttribute('aria-label', 'Village map — click a citizen to inspect them')
     this.parent.appendChild(app.canvas)
+    this.canvas = app.canvas
+    app.canvas.addEventListener('pointerdown', this.handlePointerDown)
+    app.canvas.addEventListener('pointermove', this.handlePointerMove)
     app.stage.addChild(this.world)
     this.resizeObserver = new ResizeObserver(() => this.resize())
     this.resizeObserver.observe(this.parent)
@@ -151,6 +207,10 @@ export class WorldRenderer implements FrameRenderer {
   destroy(): void {
     this.resizeObserver?.disconnect()
     this.resizeObserver = null
+    this.canvas?.removeEventListener('pointerdown', this.handlePointerDown)
+    this.canvas?.removeEventListener('pointermove', this.handlePointerMove)
+    this.canvas = null
+    this.pickListener = null
     this.citizenViews.clear()
     this.fireGlows.length = 0
     this.mapLayer.destroy()
@@ -174,6 +234,7 @@ export class WorldRenderer implements FrameRenderer {
     const fit = fitWorld(w, h, this.mapRef.width * TILE_SIZE, this.mapRef.height * TILE_SIZE)
     this.world.scale.set(fit.scale)
     this.world.position.set(fit.x, fit.y)
+    this.fit = fit
     if (fit.scale !== this.bakedScale) {
       this.bakedScale = fit.scale
       this.bakeMap()
@@ -343,6 +404,8 @@ export class WorldRenderer implements FrameRenderer {
 
   private updateCitizens(state: WorldState, alpha: number): void {
     const seen = new Set<number>()
+    this.renderedCitizens.length = 0
+    let ring: { x: number; y: number } | null = null
     for (const c of state.citizens) {
       if (!c.alive) continue
       seen.add(c.id)
@@ -353,7 +416,9 @@ export class WorldRenderer implements FrameRenderer {
         this.citizens.addChild(view.root)
       }
       const p = getVisualPosition(state, c, alpha)
-      view.root.position.set(p.x * TILE_SIZE + TILE_SIZE / 2, p.y * TILE_SIZE + TILE_SIZE / 2)
+      const px = p.x * TILE_SIZE + TILE_SIZE / 2
+      const py = p.y * TILE_SIZE + TILE_SIZE / 2
+      view.root.position.set(px, py)
 
       const cargoKind = c.carrying?.kind ?? null
       if (cargoKind !== view.cargoKind) {
@@ -374,7 +439,12 @@ export class WorldRenderer implements FrameRenderer {
       }
       // Asleep inside their own shelter: drawn as the lit house, not a dot on the roof.
       view.root.visible = !(asleep && c.homeId !== null && c.task?.targetTile === c.pos.y * state.map.width + c.pos.x)
+      // Pickable at the position actually drawn (a resident asleep inside is picked at the house).
+      this.renderedCitizens.push({ id: c.id, x: px, y: py })
+      if (c.id === this.selectedId) ring = { x: px, y: py }
     }
+    this.selectionRing.visible = ring !== null
+    if (ring) this.selectionRing.position.set(ring.x, ring.y)
     for (const [id, view] of this.citizenViews) {
       if (seen.has(id)) continue
       view.root.destroy({ children: true })

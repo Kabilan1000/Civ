@@ -2,7 +2,7 @@
 // parses, migrates older schema versions step by step, then validates the
 // full shape before handing back a WorldState.
 
-import { MAX_EVENTS, MAX_MEMORIES, ROLES, SCHEMA_VERSION, SHELTER_CAPACITY, TERRAINS } from './constants.ts'
+import { HISTORY_MAX, MAX_EVENTS, MAX_MEMORIES, ROLES, SCHEMA_VERSION, SHELTER_CAPACITY, TERRAINS } from './constants.ts'
 import type { WorldState } from './types.ts'
 
 export type SaveErrorCode = 'invalid-json' | 'unsupported-version' | 'invalid-data'
@@ -57,6 +57,14 @@ const migrations: Record<number, Migration> = {
     }))
     return { ...data, citizens, nextId }
   },
+  // v4 → v5 (M7): an empty history (no snapshots are fabricated for the
+  // past — recording starts at the next HISTORY_INTERVAL tick) and
+  // lastDecisionTick = null (the stored lastScores' tick is unknown).
+  4: (data) => ({
+    ...data,
+    history: [],
+    citizens: (data.citizens as Record<string, unknown>[]).map((c) => ({ ...c, lastDecisionTick: null })),
+  }),
 }
 
 export function serialize(state: WorldState): string {
@@ -274,6 +282,7 @@ function validateWorld(d: Record<string, unknown>): asserts d is Record<string, 
       num(score.score, `${p}.lastScores[${j}].score`)
     })
     nullable(c.lastSocialTick, `${p}.lastSocialTick`, (v, lp) => int(v, lp, 0, d.tick as number))
+    nullable(c.lastDecisionTick, `${p}.lastDecisionTick`, (v, lp) => int(v, lp, 0, d.tick as number))
     const alive = bool(c.alive, `${p}.alive`)
     const diedTick = nullable(c.diedTick, `${p}.diedTick`, (v, dp) => int(v, dp, 0))
     const cause = nullable(c.deathCause, `${p}.deathCause`, (v, cp) => oneOf(v, DEATH_CAUSES, cp))
@@ -306,6 +315,20 @@ function validateWorld(d: Record<string, unknown>): asserts d is Record<string, 
   for (const k of ['foodGathered', 'woodGathered', 'foodRegrown', 'woodRegrown', 'foodEaten', 'foodLost', 'woodLost']) {
     int(ledger[k], `ledger.${k}`, 0)
   }
+
+  // History
+  const history = arr(d.history, 'history')
+  if (history.length > HISTORY_MAX) fail('history', `at most ${HISTORY_MAX} samples`)
+  let lastSampleTick = -1
+  history.forEach((raw, i) => {
+    const p = `history[${i}]`
+    const h = obj(raw, p)
+    const t = int(h.tick, `${p}.tick`, 0, d.tick as number)
+    if (t <= lastSampleTick) fail(`${p}.tick`, 'strictly increasing ticks')
+    lastSampleTick = t
+    for (const k of ['population', 'food', 'wood', 'housed', 'capacity', 'discovered']) int(h[k], `${p}.${k}`, 0)
+    for (const k of ['satiety', 'energy', 'health', 'social']) int(h[k], `${p}.${k}`, 0, 100)
+  })
 
   // Events
   const events = arr(d.events, 'events')

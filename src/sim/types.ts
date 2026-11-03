@@ -143,8 +143,10 @@ export interface Citizen {
   /** Keyed by the other citizen's id (as a string, since JSON keys are strings). */
   relationships: Record<string, Relationship>
   memories: Memory[]
-  /** Top scores from the last decision, for the inspector. */
+  /** All action scores from the last decision, best first, for the inspector. */
   lastScores: ActionScore[]
+  /** Tick at which lastScores were computed, or null (never decided). */
+  lastDecisionTick: number | null
   /** Tick of the last completed social interaction, or null (never). */
   lastSocialTick: number | null
   alive: boolean
@@ -228,6 +230,27 @@ export interface Ledger {
   woodLost: number
 }
 
+/**
+ * One genuine snapshot of the village, recorded every HISTORY_INTERVAL ticks
+ * (systems/history.ts). Averages are over living citizens, rounded to whole
+ * numbers so samples are compact and exactly reproducible.
+ */
+export interface HistorySample {
+  tick: number
+  population: number
+  food: number
+  wood: number
+  housed: number
+  /** Housing capacity of completed shelters. */
+  capacity: number
+  /** Discovered tiles. */
+  discovered: number
+  satiety: number
+  energy: number
+  health: number
+  social: number
+}
+
 export interface WorldConfig {
   seed: string
   width: number
@@ -249,6 +272,8 @@ export interface WorldState {
   structures: Structure[]
   stockpile: Stockpile
   ledger: Ledger
+  /** Oldest first; at most HISTORY_MAX samples. */
+  history: HistorySample[]
   /** Oldest first; capped at MAX_EVENTS. */
   events: SimEvent[]
 }

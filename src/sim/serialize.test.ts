@@ -44,11 +44,19 @@ describe('serialize / deserialize', () => {
       const { stage, woodRequired: _w, lastWorkTick: _l, ...rest } = st
       return { ...rest, complete: stage === 'complete' }
     })
-    v1.citizens = v1.citizens.map(({ deathCause: _d, ...c }: any) => c)
+    v1.citizens = v1.citizens.map(({ deathCause: _d, lastSocialTick: _s, lastDecisionTick: _t, ...c }: any) => ({
+      ...c,
+      memories: c.memories.map(({ id: _id, ...m }: any) => m),
+    }))
+    delete v1.history
     const loaded = deserialize(JSON.stringify(v1))
     expect(loaded.schemaVersion).toBe(SCHEMA_VERSION)
     expect(loaded.ledger).toEqual({ foodGathered: 0, woodGathered: 0, foodRegrown: 0, woodRegrown: 0, foodEaten: 0, foodLost: 0, woodLost: 0 })
-    expect(loaded.citizens).toEqual(s.citizens)
+    // Everything carries over except data v1 never had: the decision tick is unknown.
+    expect(loaded.citizens.map((c) => c.lastDecisionTick)).toEqual(s.citizens.map(() => null))
+    expect(loaded.citizens.map((c) => ({ ...c, lastDecisionTick: null, memories: c.memories.map((m) => m.kind) })))
+      .toEqual(s.citizens.map((c) => ({ ...c, lastDecisionTick: null, memories: c.memories.map((m) => m.kind) })))
+    expect(loaded.history).toEqual([]) // never fabricated
     expect(loaded.structures[0]).toMatchObject({ kind: 'campfire', stage: 'complete' })
     stepN(loaded, 200)
     expect(loaded.tick).toBe(400)
@@ -85,6 +93,27 @@ describe('serialize / deserialize', () => {
     // The migrated village takes up the new behaviours.
     expect(a.citizens.some((c) => Object.keys(c.relationships).length > 0)).toBe(true)
     expect(a.map.discovered.filter((d) => d === 1).length).toBeGreaterThan(v3.map.discovered.filter((d: number) => d === 1).length)
+  })
+
+  it('migrates a real v4 save written by the M6 code without fabricating history', () => {
+    const raw = readFileSync(join(import.meta.dirname, '__tests__/fixtures/m6-save-v4.json'), 'utf8')
+    const v4 = JSON.parse(raw)
+    expect(v4.schemaVersion).toBe(4)
+    const a = deserialize(raw)
+    expect(a.schemaVersion).toBe(SCHEMA_VERSION)
+    expect(a.history).toEqual([])
+    expect(a.citizens.every((c) => c.lastDecisionTick === null)).toBe(true)
+    // Relationships and memories carry over untouched.
+    expect(a.citizens.map((c) => c.relationships)).toEqual(v4.citizens.map((c: any) => c.relationships))
+    expect(a.citizens.map((c) => c.memories)).toEqual(v4.citizens.map((c: any) => c.memories))
+    const b = deserialize(raw)
+    stepN(a, 500)
+    stepN(b, 500)
+    expect(serialize(a)).toBe(serialize(b))
+    // Recording starts at the next interval after the save's tick — nothing earlier.
+    expect(a.history.length).toBeGreaterThan(0)
+    expect(a.history[0]!.tick).toBeGreaterThan(v4.tick)
+    expect(a.history[0]!.tick % 24).toBe(0)
   })
 
   it('rejects a current-version save that is missing the ledger', () => {
@@ -130,6 +159,8 @@ describe('serialize / deserialize', () => {
       { id: r.citizens[1].id, tick: 0, kind: 'chat', subjectId: r.citizens[1].id, valence: 0.3 },
     ]), /unique id/], // reported where the clash is detected
     ['too many memories', (r: any) => (r.citizens[0].memories = Array.from({ length: 25 }, (_, k) => ({ id: 1000 + k, tick: 0, kind: 'chat', valence: 0 }))), /memories/],
+    ['history out of order', (r: any) => (r.history = [r.history[0], r.history[0]]), /history\[1\]\.tick/],
+    ['history value', (r: any) => (r.history[0].satiety = 150), /history\[0\]\.satiety/],
     ['dead citizen with a task', (r: any) => Object.assign(r.citizens[0], {
       alive: false, diedTick: 0, deathCause: 'starvation',
       task: { kind: 'wander', phase: 'linger', targetTile: 0, targetId: null, ticksLeft: 1, startedTick: 0 },

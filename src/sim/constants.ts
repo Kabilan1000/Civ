@@ -2,7 +2,7 @@
 import type { Needs, Role, Stockpile, Terrain } from './types.ts'
 
 /** Bump whenever the serialized WorldState shape changes, and add a migration. */
-export const SCHEMA_VERSION = 4
+export const SCHEMA_VERSION = 5
 
 // ── Time ────────────────────────────────────────────────────────────────────
 
@@ -80,6 +80,11 @@ export const START_DISCOVERY_RADIUS = 6
 export const SPAWN_RADIUS = 4
 
 export const MAX_EVENTS = 200
+
+/** A history sample is recorded at tick 0 and every HISTORY_INTERVAL ticks (10 per day). */
+export const HISTORY_INTERVAL = 24
+/** At most this many samples are kept (60 days); the oldest are dropped first. */
+export const HISTORY_MAX = 600
 
 export interface TerrainRule {
   passable: boolean

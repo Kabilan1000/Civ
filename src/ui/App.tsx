@@ -1,11 +1,23 @@
-import type { ReactNode } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useSimulation } from '../app/useSimulation.ts'
 import { Controls } from './components/Controls.tsx'
+import { Dashboard } from './components/Dashboard.tsx'
+import { EventFeed } from './components/EventFeed.tsx'
+import { HistoryCharts } from './components/HistoryCharts.tsx'
+import { Inspector } from './components/Inspector.tsx'
 import { MapView } from './components/MapView.tsx'
 
 export default function App() {
   const { controller, snapshot } = useSimulation()
   const { width, height } = controller.state.config
+  // UI-only state: which citizen is inspected. Never stored in the simulation.
+  const [selectedId, setSelectedId] = useState<number | null>(null)
+  const select = useCallback((id: number | null) => setSelectedId(id), [])
+
+  // Dev-only handle for automated browser checks (stripped from production builds).
+  useEffect(() => {
+    if (import.meta.env.DEV) (window as unknown as { __littleWorlds?: unknown }).__littleWorlds = controller
+  }, [controller])
 
   return (
     <div className="app">
@@ -15,33 +27,18 @@ export default function App() {
       </header>
 
       <main className="layout">
-        <MapView controller={controller} aspect={`${width} / ${height}`} />
-
+        <div className="world-col">
+          <MapView controller={controller} aspect={`${width} / ${height}`} selectedId={selectedId} onSelect={select} />
+          <div className="below-map">
+            <EventFeed controller={controller} snapshot={snapshot} onSelect={select} />
+            <HistoryCharts controller={controller} snapshot={snapshot} />
+          </div>
+        </div>
         <aside className="sidebar">
-          <Panel title="Civilization">
-            <span data-testid="stockpile">
-              Population {snapshot.population} · Housed {snapshot.housed} · Shelters {snapshot.shelters}
-              <br />
-              Food {snapshot.food} · Wood {snapshot.wood}
-              <br />
-              Explored {snapshot.explored}% · Social {snapshot.social} · Friendships {snapshot.friendships}
-            </span>
-            <br />
-            Full dashboard arrives in M7.
-          </Panel>
-          <Panel title="Citizen">Citizen inspector arrives in M7.</Panel>
-          <Panel title="Events">Event feed arrives in M7.</Panel>
+          <Dashboard snapshot={snapshot} />
+          <Inspector controller={controller} snapshot={snapshot} selectedId={selectedId} onSelect={select} />
         </aside>
       </main>
     </div>
-  )
-}
-
-function Panel({ title, children }: { title: string; children: ReactNode }) {
-  return (
-    <section className="panel">
-      <h2>{title}</h2>
-      <p className="muted">{children}</p>
-    </section>
   )
 }

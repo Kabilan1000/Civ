@@ -46,6 +46,7 @@ export function decide(state: WorldState): void {
     const ctx = buildContext(state, c)
     const scores = scoreActions(ctx)
     c.lastScores = scores
+    c.lastDecisionTick = state.tick
     c.nextDecisionTick = state.tick + DECISION_INTERVAL
 
     if (c.task) {
