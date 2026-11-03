@@ -5,7 +5,8 @@ import { isPassable, manhattan, toIndex, toPoint } from './grid.ts'
 import { analyzeStartArea } from './map/generate.ts'
 import { findPath } from './path/astar.ts'
 import { serialize } from './serialize.ts'
-import { createWorld } from './world.ts'
+import { pushEvent } from './events.ts'
+import { createWorld, stepN } from './world.ts'
 
 describe('createWorld', () => {
   const state = createWorld({ seed: 'spawn-test' })
@@ -87,10 +88,24 @@ describe('createWorld', () => {
     expect(state.events[0]!.citizenIds).toHaveLength(12)
   })
 
-  it('hands out ids from a single counter', () => {
-    const all = [...state.structures.map((s) => s.id), ...state.citizens.map((c) => c.id), ...state.events.map((e) => e.id)]
-    expect(new Set(all).size).toBe(all.length)
-    expect(Math.max(...all)).toBe(state.nextId - 1)
+  it('hands out entity ids from one counter and event ids from their own (schema v6)', () => {
+    const entities = [...state.structures.map((s) => s.id), ...state.citizens.map((c) => c.id)]
+    expect(new Set(entities).size).toBe(entities.length)
+    expect(Math.max(...entities)).toBe(state.nextId - 1)
+    const events = state.events.map((e) => e.id)
+    expect(new Set(events).size).toBe(events.length)
+    expect(Math.max(...events)).toBe(state.nextEventId - 1)
+  })
+
+  it('adding events never shifts entity ids', () => {
+    const a = createWorld({ seed: 'ids' })
+    const b = createWorld({ seed: 'ids' })
+    for (let i = 0; i < 5; i++) pushEvent(b, 'dayStarted', [], { day: -1 })
+    stepN(a, 2000)
+    stepN(b, 2000)
+    const ids = (s: typeof a) => [s.nextId, ...s.structures.map((x) => x.id), ...s.citizens.flatMap((c) => c.memories.map((m) => m.id))]
+    expect(ids(b)).toEqual(ids(a))
+    expect(b.nextEventId).toBe(a.nextEventId + 5)
   })
 
   it('produces valid spawns across many seeds', () => {

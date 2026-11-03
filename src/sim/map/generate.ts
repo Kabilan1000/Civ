@@ -20,7 +20,6 @@
 
 import {
   BERRY_CHANCE,
-  BERRY_MAX,
   ELEVATION_OCTAVES,
   FOREST_FRACTION_OF_LAND,
   ISLAND_FALLOFF,
@@ -34,9 +33,9 @@ import {
   SPAWN_RADIUS,
   START_DISCOVERY_RADIUS,
   TREE_CHANCE,
-  TREE_WOOD_MAX,
   WATER_FRACTION,
 } from '../constants.ts'
+import { plantNode } from '../ecology/flora.ts'
 import { isPassable, manhattan, toIndex, toPoint } from '../grid.ts'
 import { labelRegions, reachableMask } from '../path/flood.ts'
 import { chance, seedRng, shuffle } from '../rng.ts'
@@ -194,9 +193,9 @@ function chooseCampTile(map: TileMap, spawnTiles: number, minRegion: number): Ti
 
 // ── Resources ───────────────────────────────────────────────────────────────
 
+/** A full mature plant; createWorld then gives it a staggered age (ecology/flora.ts). */
 function node(kind: ResourceKind) {
-  const max = kind === 'berries' ? BERRY_MAX : TREE_WOOD_MAX
-  return { kind, amount: max, max }
+  return plantNode(kind)
 }
 
 /** Berries on some grass, trees on most forest; one RNG draw per grass/forest tile in index order. */

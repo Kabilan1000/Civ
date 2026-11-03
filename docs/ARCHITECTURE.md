@@ -130,10 +130,10 @@ Each tick runs systems in a fixed order:
 7. **social** — resolve conversations between adjacent citizens.
 8. **stats** — sample civilization metrics (every 24 ticks) for the dashboard.
 
-Implemented so far (M7 — social and exploration run inside decide/act):
-`time → needs (incl. health, death) → resources → construction → decide →
+Implemented so far (social and exploration run inside decide/act):
+`time → needs (incl. health, death) → ecology → construction → decide →
 act → history` (`systems/time.ts`, `needs.ts`, `death.ts`,
-`resources.ts`, `construction.ts`, `decide.ts`, `tasks.ts`). The other systems slot into the
+`ecology.ts` (M10b, replaced `resources.ts`), `construction.ts`, `decide.ts`, `tasks.ts`). The other systems slot into the
 positions above as their milestones land.
 
 ### 3.5 Map
@@ -277,13 +277,25 @@ only, planned once) → arrival phase (`ai/phases.ts`): `gather`, `deposit`,
 - **Stockpile access:** depositing and eating from the stockpile only work
   within Manhattan 1 of the campfire. Eating uses carried berries first, one
   unit per 3 ticks, +25 satiety each, until satiety ≥ 90.
-- **Regrowth** (`systems/resources.ts`): every 48 ticks each bush below max
-  regrows 1 (5/day); every 480 ticks each tree regrows 1. Bushes hold 6,
-  trees 8. Depleted nodes stay (bare bush / stump) and regrow.
+- **Regrowth** (`systems/ecology.ts`, M10b): every 48 ticks each mature
+  bush below max regrows 1 (5/day); every 160 ticks each mature tree
+  regrows 1. Bushes hold 6, trees 8. Depleted plants stay (bare bush /
+  stump) and regrow.
+- **Plant lifecycle (M10b, checkpoint):** plants carry a stage (seedling,
+  young, mature, old, dead), `bornTick` and `lifespanDays`; stage caps and
+  regrowth rates follow `PLANT_STAGE_MAX` / `PLANT_REGROWTH`; dead trees are
+  harvestable deadwood that rots 1 unit per 4 days (`ledger.woodDecayed`).
+  Initial plants get staggered ages in the mature window from a creation-only
+  `seed#flora` stream (placement unchanged). **Senescence (old age and death)
+  is gated off** (`PLANT_SENESCENCE_ENABLED = false`) until reproduction
+  (M10c): plants age but stay mature, which is exactly v0.1 behaviour —
+  verified by behaviour-parity hashes against the pre-M10b simulation.
+  Tests run the full lifecycle via `stepWithRules`.
 - **Conservation:** all transfers move whole units, and `state.ledger`
   counts gathered, regrown and eaten units so that, at every tick,
-  `map + carried + stockpile + eaten − regrown` is constant for food and
-  `map + carried + stockpile − regrown` for wood (tested every tick).
+  `map + carried + stockpile + eaten + lost + decayed − regrown` is constant
+  for food and `map + carried + stockpile + held by structures + lost +
+  decayed − regrown` for wood (tested every tick; `__tests__/invariants.ts`).
 - **Shelters** (M5, `systems/construction.ts`, `structures.ts`,
   `ai/actions/build.ts`):
   - **Cost:** 12 wood + 60 labour ticks; houses 3. Four shelters (48 wood)
@@ -447,7 +459,11 @@ type Terrain = 'water' | 'sand' | 'grass' | 'forest' | 'rock';
 type ResourceKind = 'berries' | 'wood';
 type Role = 'forager' | 'builder' | 'explorer';
 
-interface ResourceNode { kind: ResourceKind; amount: number; max: number }
+type PlantStage = 'seedling' | 'young' | 'mature' | 'old' | 'dead';
+interface ResourceNode {           // a plant, identified by its tile (no id)
+  kind: ResourceKind; amount: number; max: number;  // max = current stage cap
+  stage: PlantStage; bornTick: number; lifespanDays: number; diedTick: number | null;
+}
 
 interface TileMap {
   width: number;                   // 36
@@ -550,16 +566,18 @@ interface WorldConfig {
 }
 
 interface WorldState {
-  schemaVersion: 1;
+  schemaVersion: number;           // current: SCHEMA_VERSION
   config: WorldConfig;
   tick: number;
   rng: [number, number, number, number];
-  nextId: number;
+  nextId: number;                  // citizens, structures, memories
+  nextEventId: number;             // events (own counter since schema v6)
   map: TileMap;
   citizens: Citizen[];             // sorted by id; dead citizens kept (alive=false)
   structures: Structure[];
   stockpile: { food: number; wood: number };
   events: SimEvent[];              // ring buffer, cap 200
+  ecology: { rng: RngState; counters: {...} };  // M10b: own RNG stream
 }
 ```
 
@@ -841,10 +859,10 @@ little-worlds/
     │   │       ├── eat.ts  forage.ts  chop.ts  build.ts
     │   │       └── rest.ts socialize.ts explore.ts wander.ts
     │   ├── systems/
-    │   │   ├── time.ts  needs.ts  health.ts  resources.ts
+    │   │   ├── time.ts  needs.ts  health.ts  ecology.ts
     │   │   ├── decide.ts            # utility AI + hysteresis
     │   │   ├── needs.ts             # needs decay/recovery
-    │   │   ├── resources.ts         # regrowth
+    │   │   ├── ecology.ts           # plant lifecycle + regrowth (M10b)
     │   │   └── tasks.ts movement.ts social.ts stats.ts
     │   └── __tests__/               # cross-cutting tests (determinism, invariants, arch, perf)
     ├── app/

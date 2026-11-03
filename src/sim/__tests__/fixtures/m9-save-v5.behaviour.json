@@ -1,0 +1,20 @@
+{
+  "description": "How the m9-save-v5.json world continues under the pre-M10b simulation (id-independent behaviour hashes).",
+  "sourceCommit": "864cc5bb3fbbb3bc6c94910306c7364799332e52",
+  "schemaVersion": 5,
+  "savedTick": 4877,
+  "continuation": [
+    {
+      "tick": 5117,
+      "behaviour": "78d57b5eaeea75944e32985d1f805fb43ebf757341031398608af0a89340c861"
+    },
+    {
+      "tick": 7277,
+      "behaviour": "04e6dd598b501f1d34ae5c4abf394649243d644e78bdd9dccc78007366c35f90"
+    },
+    {
+      "tick": 12077,
+      "behaviour": "d1c8ba446931c1b75a5fefa6964a86e3ed92282198928801b5bfa1a13c05acb3"
+    }
+  ]
+}

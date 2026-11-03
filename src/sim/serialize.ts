@@ -2,8 +2,19 @@
 // parses, migrates older schema versions step by step, then validates the
 // full shape before handing back a WorldState.
 
-import { HISTORY_MAX, MAX_EVENTS, MAX_MEMORIES, ROLES, SCHEMA_VERSION, SHELTER_CAPACITY, TERRAINS } from './constants.ts'
-import type { WorldState } from './types.ts'
+import {
+  HISTORY_MAX,
+  MAX_EVENTS,
+  MAX_MEMORIES,
+  PLANT_STAGE_MAX,
+  ROLES,
+  SCHEMA_VERSION,
+  SHELTER_CAPACITY,
+  TERRAINS,
+} from './constants.ts'
+import { assignMigratedAges } from './ecology/flora.ts'
+import { seedRng } from './rng.ts'
+import type { TileMap, WorldState } from './types.ts'
 
 export type SaveErrorCode = 'invalid-json' | 'unsupported-version' | 'invalid-data'
 
@@ -65,6 +76,34 @@ const migrations: Record<number, Migration> = {
     history: [],
     citizens: (data.citizens as Record<string, unknown>[]).map((c) => ({ ...c, lastDecisionTick: null })),
   }),
+  // v5 → v6 (M10b): plant lifecycles. Every plant becomes mature with its
+  // amount and max unchanged, and gets a lifespan and age derived from hashes
+  // of seed and tile (staggered like new worlds, no RNG state; TDS §6.5). Plants are never
+  // removed or moved — including those near structures, inside what is now
+  // the settlement clearing (TDS §7.11). The ledger gains decay counters, the
+  // world an ecology stream and counters, and events their own id counter
+  // (starting at nextId, so every existing id stays unique). History samples
+  // are kept unchanged.
+  5: (data) => {
+    const tick = data.tick as number
+    const seed = String((data.config as Record<string, unknown>).seed)
+    const map = data.map as Record<string, unknown>
+    const migrated = {
+      ...map,
+      resources: (map.resources as (Record<string, unknown> | null)[]).map((r) => (r ? { ...r } : null)),
+    } as unknown as TileMap
+    assignMigratedAges(migrated, seed, tick)
+    return {
+      ...data,
+      nextEventId: data.nextId,
+      map: migrated,
+      ledger: { ...(data.ledger as Record<string, unknown>), foodDecayed: 0, woodDecayed: 0 },
+      ecology: {
+        rng: seedRng(`${seed}#ecology@${tick}`),
+        counters: { births: { berries: 0, wood: 0 }, deaths: { berries: 0, wood: 0 }, seedsCast: 0, fallenFruitSprouts: 0 },
+      },
+    }
+  },
 }
 
 export function serialize(state: WorldState): string {
@@ -149,6 +188,7 @@ function nullable<T>(v: unknown, path: string, check: (v: unknown, path: string)
 }
 
 const RESOURCE_KINDS = ['berries', 'wood'] as const
+const PLANT_STAGES = ['seedling', 'young', 'mature', 'old', 'dead'] as const
 const ACTION_KINDS = ['eat', 'forage', 'chop', 'deliver', 'share', 'build', 'rest', 'socialize', 'explore', 'wander', 'idle'] as const
 const STRUCTURE_KINDS = ['campfire', 'shelter'] as const
 const STRUCTURE_STAGES = ['planned', 'underConstruction', 'complete'] as const
@@ -174,6 +214,7 @@ function validateWorld(d: Record<string, unknown>): asserts d is Record<string, 
   if (rng.length !== 4) fail('rng', '4 uint32 words')
   rng.forEach((w, i) => int(w, `rng[${i}]`, 0, 0xffff_ffff))
   const nextId = int(d.nextId, 'nextId', 1)
+  const nextEventId = int(d.nextEventId, 'nextEventId', 1)
 
   // Map
   const map = obj(d.map, 'map')
@@ -188,9 +229,20 @@ function validateWorld(d: Record<string, unknown>): asserts d is Record<string, 
   sized(map.resources, 'map.resources').forEach((r, i) =>
     nullable(r, `map.resources[${i}]`, (v, p) => {
       const node = obj(v, p)
-      oneOf(node.kind, RESOURCE_KINDS, `${p}.kind`)
-      const max = num(node.max, `${p}.max`, 0)
-      num(node.amount, `${p}.amount`, 0, max)
+      const kind = oneOf(node.kind, RESOURCE_KINDS, `${p}.kind`)
+      const stage = oneOf(node.stage, PLANT_STAGES, `${p}.stage`)
+      const max = int(node.max, `${p}.max`, 0)
+      int(node.amount, `${p}.amount`, 0, max)
+      int(node.bornTick, `${p}.bornTick`, -Infinity, d.tick as number)
+      int(node.lifespanDays, `${p}.lifespanDays`, 1, 1000)
+      if (stage === 'dead') {
+        if (kind !== 'wood') fail(`${p}.stage`, "'dead' only for trees")
+        int(node.diedTick, `${p}.diedTick`, 0, d.tick as number)
+        if (max > PLANT_STAGE_MAX.wood.mature) fail(`${p}.max`, `at most ${PLANT_STAGE_MAX.wood.mature} for deadwood`)
+      } else {
+        if (node.diedTick !== null) fail(`${p}.diedTick`, 'null for a living plant')
+        if (max !== PLANT_STAGE_MAX[kind][stage]) fail(`${p}.max`, `${PLANT_STAGE_MAX[kind][stage]} (the ${stage} cap)`)
+      }
       return node
     }),
   )
@@ -312,9 +364,22 @@ function validateWorld(d: Record<string, unknown>): asserts d is Record<string, 
   num(stock.food, 'stockpile.food', 0)
   num(stock.wood, 'stockpile.wood', 0)
   const ledger = obj(d.ledger, 'ledger')
-  for (const k of ['foodGathered', 'woodGathered', 'foodRegrown', 'woodRegrown', 'foodEaten', 'foodLost', 'woodLost']) {
+  for (const k of ['foodGathered', 'woodGathered', 'foodRegrown', 'woodRegrown', 'foodEaten', 'foodLost', 'woodLost', 'foodDecayed', 'woodDecayed']) {
     int(ledger[k], `ledger.${k}`, 0)
   }
+
+  // Ecology
+  const ecology = obj(d.ecology, 'ecology')
+  const ecoRng = arr(ecology.rng, 'ecology.rng')
+  if (ecoRng.length !== 4) fail('ecology.rng', '4 uint32 words')
+  ecoRng.forEach((w, i) => int(w, `ecology.rng[${i}]`, 0, 0xffff_ffff))
+  const counters = obj(ecology.counters, 'ecology.counters')
+  for (const k of ['births', 'deaths']) {
+    const c = obj(counters[k], `ecology.counters.${k}`)
+    for (const kind of RESOURCE_KINDS) int(c[kind], `ecology.counters.${k}.${kind}`, 0)
+  }
+  int(counters.seedsCast, 'ecology.counters.seedsCast', 0)
+  int(counters.fallenFruitSprouts, 'ecology.counters.fallenFruitSprouts', 0)
 
   // History
   const history = arr(d.history, 'history')
@@ -332,11 +397,14 @@ function validateWorld(d: Record<string, unknown>): asserts d is Record<string, 
 
   // Events
   const events = arr(d.events, 'events')
+  const eventIds = new Set<number>() // events have their own id space (v6)
   if (events.length > MAX_EVENTS) fail('events', `at most ${MAX_EVENTS} entries`)
   events.forEach((raw, i) => {
     const p = `events[${i}]`
     const e = obj(raw, p)
-    uniqueId(e.id, `${p}.id`)
+    const eid = int(e.id, `${p}.id`, 1, nextEventId - 1)
+    if (eventIds.has(eid)) fail(`${p}.id`, 'unique event id')
+    eventIds.add(eid)
     int(e.tick, `${p}.tick`, 0, d.tick as number)
     oneOf(e.kind, EVENT_KINDS, `${p}.kind`)
     arr(e.citizenIds, `${p}.citizenIds`).forEach((c, j) => id(c, `${p}.citizenIds[${j}]`))

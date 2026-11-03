@@ -10,7 +10,8 @@ import { updateConstruction } from './systems/construction.ts'
 import { decide } from './systems/decide.ts'
 import { recordHistory, recordSample } from './systems/history.ts'
 import { updateNeeds } from './systems/needs.ts'
-import { regrowResources } from './systems/resources.ts'
+import { assignInitialAges } from './ecology/flora.ts'
+import { DEFAULT_ECOLOGY_RULES, updateEcology, type EcologyRules } from './systems/ecology.ts'
 import { advanceTasks } from './systems/tasks.ts'
 import { advanceTime } from './systems/time.ts'
 import type { Structure, TileIndex, WorldConfig, WorldState } from './types.ts'
@@ -42,6 +43,7 @@ export function createWorld(overrides: Partial<WorldConfig> = {}): WorldState {
     spawnTiles: config.citizenCount,
   })
   revealAround(map, campTile, START_DISCOVERY_RADIUS)
+  assignInitialAges(map, config.seed) // own derived stream: placement is unchanged
 
   const state: WorldState = {
     schemaVersion: SCHEMA_VERSION,
@@ -49,13 +51,28 @@ export function createWorld(overrides: Partial<WorldConfig> = {}): WorldState {
     tick: 0,
     rng: seedRng(config.seed),
     nextId: 1,
+    nextEventId: 1,
     map,
     citizens: [],
     structures: [],
     stockpile: { ...INITIAL_STOCKPILE },
-    ledger: { foodGathered: 0, woodGathered: 0, foodRegrown: 0, woodRegrown: 0, foodEaten: 0, foodLost: 0, woodLost: 0 },
+    ledger: {
+      foodGathered: 0,
+      woodGathered: 0,
+      foodRegrown: 0,
+      woodRegrown: 0,
+      foodEaten: 0,
+      foodLost: 0,
+      woodLost: 0,
+      foodDecayed: 0,
+      woodDecayed: 0,
+    },
     history: [],
     events: [],
+    ecology: {
+      rng: seedRng(`${config.seed}#ecology`),
+      counters: { births: { berries: 0, wood: 0 }, deaths: { berries: 0, wood: 0 }, seedsCast: 0, fallenFruitSprouts: 0 },
+    },
   }
 
   state.structures.push(createCampfire(allocateId(state), campTile))
@@ -72,13 +89,28 @@ export function createWorld(overrides: Partial<WorldConfig> = {}): WorldState {
 /**
  * Advance the world by exactly one tick, mutating it in place.
  * System order is fixed (see docs/ARCHITECTURE.md §3.4):
- * time → needs (incl. health, death) → resources → construction → decide → act → history.
+ * time → needs (incl. health, death) → ecology → construction → decide → act → history.
  * Social and stats systems (M6/M7) will follow act.
  */
 export function step(state: WorldState): void {
+  stepWithRules(state, DEFAULT_SIM_RULES)
+}
+
+/** Rule switches for systems still under development (only tests change them). */
+export interface SimRules {
+  ecology: EcologyRules
+}
+
+export const DEFAULT_SIM_RULES: Readonly<SimRules> = { ecology: DEFAULT_ECOLOGY_RULES }
+
+/**
+ * step() with explicit rules — e.g. plant senescence on, which stays off by
+ * default until M10c (TDS §7.11). Not part of the public sim API.
+ */
+export function stepWithRules(state: WorldState, rules: Readonly<SimRules>): void {
   advanceTime(state)
   updateNeeds(state)
-  regrowResources(state)
+  updateEcology(state, rules.ecology)
   updateConstruction(state)
   decide(state)
   advanceTasks(state)

@@ -23,6 +23,11 @@ function corrupt(mutate: (raw: Record<string, any>) => void): string {
   return JSON.stringify(raw)
 }
 
+/** The first plant of a kind (or any) in a raw save, for corruption tests. */
+function plant(r: any, kind?: 'berries' | 'wood'): any {
+  return r.map.resources.find((x: any) => x && (!kind || x.kind === kind))
+}
+
 describe('serialize / deserialize', () => {
   it('round-trips a world exactly', () => {
     const s = createWorld({ seed: 'round-trip' })
@@ -51,7 +56,10 @@ describe('serialize / deserialize', () => {
     delete v1.history
     const loaded = deserialize(JSON.stringify(v1))
     expect(loaded.schemaVersion).toBe(SCHEMA_VERSION)
-    expect(loaded.ledger).toEqual({ foodGathered: 0, woodGathered: 0, foodRegrown: 0, woodRegrown: 0, foodEaten: 0, foodLost: 0, woodLost: 0 })
+    expect(loaded.ledger).toEqual({
+      foodGathered: 0, woodGathered: 0, foodRegrown: 0, woodRegrown: 0, foodEaten: 0, foodLost: 0, woodLost: 0,
+      foodDecayed: 0, woodDecayed: 0, // added by the v5 → v6 step
+    })
     // Everything carries over except data v1 never had: the decision tick is unknown.
     expect(loaded.citizens.map((c) => c.lastDecisionTick)).toEqual(s.citizens.map(() => null))
     expect(loaded.citizens.map((c) => ({ ...c, lastDecisionTick: null, memories: c.memories.map((m) => m.kind) })))
@@ -171,6 +179,22 @@ describe('serialize / deserialize', () => {
     ['event kind', (r: any) => (r.events[0].kind = 'party'), /events\[0\]\.kind/],
     ['event from the future', (r: any) => (r.events[0].tick = 10), /events\[0\]\.tick/],
     ['too many events', (r: any) => (r.events = Array.from({ length: 201 }, () => r.events[0])), /events/],
+    // Schema v6 (M10b): plant lifecycles, ecology state, separate event ids.
+    ['plant stage', (r: any) => (plant(r).stage = 'ancient'), /map\.resources\[\d+\]\.stage/],
+    ['dead bush', (r: any) => Object.assign(plant(r, 'berries'), { stage: 'dead', diedTick: 0 }), /only for trees/],
+    ['cap not matching stage', (r: any) => (plant(r).max = 99), /map\.resources\[\d+\]\.max/],
+    ['amount above cap', (r: any) => (plant(r).amount = plant(r).max + 1), /map\.resources\[\d+\]\.amount/],
+    ['fractional amount', (r: any) => (plant(r).amount = 1.5), /map\.resources\[\d+\]\.amount/],
+    ['living plant with diedTick', (r: any) => (plant(r).diedTick = 0), /diedTick/],
+    ['deadwood without diedTick', (r: any) => Object.assign(plant(r, 'wood'), { stage: 'dead', diedTick: null }), /diedTick/],
+    ['lifespan', (r: any) => (plant(r).lifespanDays = 0), /lifespanDays/],
+    ['born in the future', (r: any) => (plant(r).bornTick = r.tick + 1), /bornTick/],
+    ['decay ledger', (r: any) => (r.ledger.woodDecayed = -1), /ledger\.woodDecayed/],
+    ['missing ecology', (r: any) => delete r.ecology, /ecology/],
+    ['ecology rng', (r: any) => r.ecology.rng.pop(), /ecology\.rng/],
+    ['ecology counter', (r: any) => (r.ecology.counters.deaths.wood = -1), /ecology\.counters\.deaths\.wood/],
+    ['event id beyond nextEventId', (r: any) => (r.nextEventId = r.events.at(-1).id), /events\[\d+\]\.id/],
+    ['duplicate event id', (r: any) => (r.events[1] = { ...r.events[1], id: r.events[0].id }), /unique event id/],
   ])('rejects corrupt %s', (_name, mutate, message) => {
     expectSaveError(() => deserialize(corrupt(mutate)), 'invalid-data', message)
   })

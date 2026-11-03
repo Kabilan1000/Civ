@@ -4,12 +4,12 @@
 // balance figures are reported, not forced.
 
 import { performance } from 'node:perf_hooks'
+import { conservationTotals, plantViolations } from './invariants.ts'
 import { describe, expect, it } from 'vitest'
-import { CARRY_CAPACITY, MAX_EVENTS, MAX_MEMORIES, SHELTER_CAPACITY, TICKS_PER_DAY } from '../constants.ts'
+import { CARRY_CAPACITY, MAX_EVENTS, MAX_MEMORIES, PLANT_SENESCENCE_ENABLED, SHELTER_CAPACITY, TICKS_PER_DAY } from '../constants.ts'
 import { isAdjacent4, isPassable, toIndex } from '../grid.ts'
 import { getCivStats } from '../selectors.ts'
 import { deserialize, serialize } from '../serialize.ts'
-import type { WorldState } from '../types.ts'
 import { createWorld, step, stepN } from '../world.ts'
 
 const RUN = process.env.LW_SWEEP === '1'
@@ -17,20 +17,7 @@ const SEEDS = Number(process.env.LW_SEEDS ?? 30)
 const DAYS = Number(process.env.LW_DAYS ?? 30)
 const LONG_DAYS = Number(process.env.LW_LONG_DAYS ?? 100)
 
-function totals(s: WorldState) {
-  let food = s.stockpile.food + s.ledger.foodEaten + s.ledger.foodLost - s.ledger.foodRegrown
-  let wood = s.stockpile.wood + s.ledger.woodLost - s.ledger.woodRegrown
-  for (const r of s.map.resources) {
-    if (r?.kind === 'berries') food += r.amount
-    else if (r) wood += r.amount
-  }
-  for (const c of s.citizens) {
-    if (c.carrying?.kind === 'berries') food += c.carrying.amount
-    else if (c.carrying) wood += c.carrying.amount
-  }
-  for (const st of s.structures) wood += st.woodDelivered
-  return { food, wood }
-}
+const totals = conservationTotals // decay terms included since M10b
 
 interface Report {
   seed: string
@@ -90,6 +77,7 @@ function runSeed(seed: string, days: number): Report {
     expect(totals(s)).toEqual(start)
     expect(s.stockpile.food >= 0 && s.stockpile.wood >= 0).toBe(true)
     expect(s.events.length).toBeLessThanOrEqual(MAX_EVENTS)
+    expect(plantViolations(s, PLANT_SENESCENCE_ENABLED)).toEqual([])
     for (const [i, c] of s.citizens.entries()) {
       const tile = toIndex(c.pos.x, c.pos.y, s.map.width)
       expect(isPassable(s.map, tile)).toBe(true)

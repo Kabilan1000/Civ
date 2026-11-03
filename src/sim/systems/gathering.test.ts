@@ -1,33 +1,16 @@
 import { describe, expect, it } from 'vitest'
+import { conservationTotals } from '../__tests__/invariants.ts'
 import { sandbox } from '../__tests__/sandbox.ts'
 import { CARRY_CAPACITY, GATHER_TICKS, TICKS_PER_DAY } from '../constants.ts'
 import { isAdjacent4, isPassable, toIndex } from '../grid.ts'
 import { discoveredOnly } from '../ai/travel.ts'
 import { findPath } from '../path/astar.ts'
 import { deserialize, serialize } from '../serialize.ts'
-import type { WorldState } from '../types.ts'
 import { createWorld, step, stepN } from '../world.ts'
 import { advanceTasks } from './tasks.ts'
 
-function totals(s: WorldState) {
-  let mapFood = 0
-  let mapWood = 0
-  for (const r of s.map.resources) {
-    if (r?.kind === 'berries') mapFood += r.amount
-    else if (r?.kind === 'wood') mapWood += r.amount
-  }
-  let carriedFood = 0
-  let carriedWood = 0
-  for (const c of s.citizens) {
-    if (c.carrying?.kind === 'berries') carriedFood += c.carrying.amount
-    else if (c.carrying?.kind === 'wood') carriedWood += c.carrying.amount
-  }
-  const siteWood = s.structures.reduce((n, st) => n + st.woodDelivered, 0)
-  return {
-    food: mapFood + carriedFood + s.stockpile.food + s.ledger.foodEaten + s.ledger.foodLost - s.ledger.foodRegrown,
-    wood: mapWood + carriedWood + s.stockpile.wood + siteWood + s.ledger.woodLost - s.ledger.woodRegrown,
-  }
-}
+/** The ledger identity, shared with the sweep (decay terms included since M10b). */
+const totals = conservationTotals
 
 describe('gathering', () => {
   it('takes GATHER_TICKS per unit, fills the inventory and depletes the bush', () => {

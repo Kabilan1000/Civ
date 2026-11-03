@@ -2,7 +2,7 @@
 import type { Needs, Role, Stockpile, Terrain } from './types.ts'
 
 /** Bump whenever the serialized WorldState shape changes, and add a migration. */
-export const SCHEMA_VERSION = 5
+export const SCHEMA_VERSION = 6
 
 // ── Time ────────────────────────────────────────────────────────────────────
 
@@ -196,8 +196,37 @@ export const REST_RADIUS = 2
 export const REST_STOP_ENERGY = 98
 
 /** Every N ticks each non-full node regrows one unit. */
-export const BERRY_REGROW_INTERVAL = 48 // 5 units per bush per day
-export const TREE_REGROW_INTERVAL = 160 // 1.5 units per tree per day
+export const BERRY_REGROW_INTERVAL = 48 // 5 units per bush per day (mature; half for young/old)
+export const TREE_REGROW_INTERVAL = 160 // 1.5 units per tree per day (mature; half for young)
+
+// ── Plant lifecycle (M10b, docs/design/LIVING_WORLD_TDS.md §7.1–7.2) ─────────
+// Stages by age in whole days: seedling < SEEDLING_DAYS ≤ young < MATURE_AT ≤
+// mature < floor(lifespan × OLD_AT‰ / 1000) ≤ old < lifespan ≤ death.
+// Trees are short-lived pioneers (GDD §3.3); a dead tree is harvestable deadwood.
+
+/**
+ * M10b gate (TDS §7.11): plant senescence — the 'old' stage and death — is OFF
+ * until reproduction arrives in M10c. While off, plants still age but stay
+ * mature, which is exactly v0.1 behaviour, so the ecology cannot run down.
+ * Tests pass rules with senescence on (systems/ecology.ts EcologyRules).
+ */
+export const PLANT_SENESCENCE_ENABLED = false
+export const PLANT_SEEDLING_DAYS = { berries: 2, wood: 6 } as const
+export const PLANT_MATURE_AT_DAYS = { berries: 5, wood: 20 } as const
+export const PLANT_OLD_AT_PERMILLE = { berries: 800, wood: 750 } as const
+export const PLANT_LIFESPAN_DAYS = { berries: { min: 28, max: 44 }, wood: { min: 90, max: 150 } } as const
+/** Units cap by stage. Mature equals v0.1 (BERRY_MAX / TREE_WOOD_MAX), so day-1 balance is unchanged. Deadwood keeps its wood at death. */
+export const PLANT_STAGE_MAX = {
+  berries: { seedling: 0, young: 3, mature: BERRY_MAX, old: 4 },
+  wood: { seedling: 0, young: 4, mature: TREE_WOOD_MAX, old: TREE_WOOD_MAX },
+} as const
+export type RegrowthRate = 'none' | 'half' | 'full'
+export const PLANT_REGROWTH: Readonly<Record<'berries' | 'wood', Record<'seedling' | 'young' | 'mature' | 'old' | 'dead', RegrowthRate>>> = {
+  berries: { seedling: 'none', young: 'half', mature: 'full', old: 'half', dead: 'none' },
+  wood: { seedling: 'none', young: 'half', mature: 'full', old: 'none', dead: 'none' },
+}
+/** Deadwood loses one unit (to ledger.woodDecayed) every this many days after death. */
+export const DEADWOOD_ROT_DAYS = 4
 
 // ── Construction & housing ──────────────────────────────────────────────────
 // Balance: 4 shelters house 12 citizens and cost 48 wood. Builders gather

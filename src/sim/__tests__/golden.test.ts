@@ -1,31 +1,48 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { SCHEMA_VERSION } from '../constants.ts'
-import { computeGolden, GOLDEN_SEEDS, GOLDEN_TICKS, type GoldenFixture } from './golden.ts'
+import { createWorld, stepN } from '../world.ts'
+import { behaviourHash } from './fingerprint.ts'
+import { GOLDEN_SEEDS, GOLDEN_TICKS, tick0MapHash, type GoldenFixture } from './golden.ts'
 
-// D1 (M10a parity) and D6 (seed stability), docs/design/LIVING_WORLD_TDS.md §6.4.
-// The fixture was recorded from the simulation BEFORE M10a by
-// scripts/capture-golden.ts. Every hash must match byte for byte: M10a may not
-// change WorldState, ids, events, RNG use or behaviour. Retired in M10b.
+// docs/design/LIVING_WORLD_TDS.md §6.4.
+//
+// D1 (M10a byte parity) is retired as planned: M10b changes the save shape
+// (plant fields, ecology state, a separate event-id counter), so serialize()
+// can no longer match the v5 hashes. What it guarded — "the simulation still
+// behaves exactly as before" — is now checked by BEHAVIOUR PARITY below.
+//
+// D6 (seed stability) stays: the tick-0 terrain and resource placement for
+// every existing seed must match v0.1 byte for byte.
 
-const fixture = JSON.parse(
-  readFileSync(new URL('./fixtures/golden-v5.json', import.meta.url), 'utf8'),
-) as GoldenFixture
+const golden = JSON.parse(readFileSync(new URL('./fixtures/golden-v5.json', import.meta.url), 'utf8')) as GoldenFixture
+const behaviour = JSON.parse(readFileSync(new URL('./fixtures/behaviour-v5.json', import.meta.url), 'utf8')) as {
+  sourceCommit: string
+  seeds: { seed: string; checkpoints: { tick: number; behaviour: string }[] }[]
+}
 
-describe('golden v5 state (pre-M10a parity)', () => {
-  it('fixture covers the documented seeds and checkpoints from a recorded commit', () => {
-    expect(fixture.sourceCommit).toMatch(/^[0-9a-f]{40}$/)
-    expect(fixture.schemaVersion).toBe(5)
-    expect(SCHEMA_VERSION).toBe(fixture.schemaVersion)
-    expect(fixture.seeds.map((s) => s.seed)).toEqual([...GOLDEN_SEEDS])
-    for (const s of fixture.seeds) expect(s.checkpoints.map((c) => c.tick)).toEqual([...GOLDEN_TICKS])
+describe('D6 seed stability: tick-0 terrain and resources unchanged since v0.1', () => {
+  for (const expected of golden.seeds) {
+    it(`seed "${expected.seed}"`, () => {
+      expect(tick0MapHash(createWorld({ seed: expected.seed }))).toBe(expected.tick0Map)
+    })
+  }
+})
+
+describe('behaviour parity with the pre-M10b simulation (senescence off, the M10b default)', () => {
+  it('fixture was recorded from a known commit for the golden seeds and checkpoints', () => {
+    expect(behaviour.sourceCommit).toMatch(/^[0-9a-f]{40}$/)
+    expect(behaviour.seeds.map((s) => s.seed)).toEqual([...GOLDEN_SEEDS])
+    for (const s of behaviour.seeds) expect(s.checkpoints.map((c) => c.tick)).toEqual([...GOLDEN_TICKS])
   })
 
-  for (const expected of fixture.seeds) {
-    it(`seed "${expected.seed}": serialize() is byte-identical at every checkpoint`, () => {
-      const actual = computeGolden(expected.seed)
-      expect(actual.tick0Map).toBe(expected.tick0Map)
-      expect(actual.checkpoints).toEqual(expected.checkpoints)
+  for (const expected of behaviour.seeds) {
+    it(`seed "${expected.seed}": every checkpoint behaves identically`, () => {
+      const s = createWorld({ seed: expected.seed })
+      const actual = GOLDEN_TICKS.map((tick) => {
+        stepN(s, tick - s.tick)
+        return { tick, behaviour: behaviourHash(s) }
+      })
+      expect(actual).toEqual(expected.checkpoints)
     })
   }
 })

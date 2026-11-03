@@ -17,10 +17,26 @@ export type Role = 'forager' | 'builder' | 'explorer'
 /** sfc32 generator state: four uint32 words. */
 export type RngState = [number, number, number, number]
 
+/**
+ * Plant life stages (M10b, systems/ecology.ts). 'dead' is harvestable
+ * deadwood and exists only for trees.
+ */
+export type PlantStage = 'seedling' | 'young' | 'mature' | 'old' | 'dead'
+
+/** A plant on a tile: a berry bush or a (pioneer) tree. Identified by its tile index, never by an id. */
 export interface ResourceNode {
   kind: ResourceKind
+  /** Whole units on the plant, 0..max. */
   amount: number
+  /** Cap for the current stage (stored so AI and renderer need not know the calendar). For deadwood: its wood at death. */
   max: number
+  stage: PlantStage
+  /** Tick the plant germinated; negative for plants older than the world. Age in days = floor((tick − bornTick) / 240). */
+  bornTick: number
+  /** Whole days. */
+  lifespanDays: number
+  /** Tick the tree died (stage 'dead'); null while alive. */
+  diedTick: number | null
 }
 
 export interface TileMap {
@@ -214,9 +230,9 @@ export interface Stockpile {
 /**
  * Cumulative resource accounting since world creation (all non-negative
  * integers). Lets tests and the dashboard check conservation:
- *   food on map + carried + stockpile.food + foodEaten + foodLost
+ *   food on map + carried + stockpile.food + foodEaten + foodLost + foodDecayed
  *     = initial food + foodRegrown
- *   wood on map + carried + stockpile.wood + wood held by structures + woodLost
+ *   wood on map + carried + stockpile.wood + wood held by structures + woodLost + woodDecayed
  *     = initial wood + woodRegrown
  */
 export interface Ledger {
@@ -228,6 +244,22 @@ export interface Ledger {
   /** Carried goods that perished with a citizen who died. */
   foodLost: number
   woodLost: number
+  /** Units that left the world on plants: a dying bush's berries, a stage-cap drop, deadwood rot (M10b). */
+  foodDecayed: number
+  woodDecayed: number
+}
+
+/** Ecology bookkeeping (M10b). Plants themselves live in map.resources. */
+export interface EcologyState {
+  /** Dedicated sfc32 stream: ecology never draws from, or perturbs, the AI stream `WorldState.rng`. */
+  rng: RngState
+  /** Cumulative since world creation (or since migration to schema v6). */
+  counters: {
+    births: Record<ResourceKind, number>
+    deaths: Record<ResourceKind, number>
+    seedsCast: number
+    fallenFruitSprouts: number
+  }
 }
 
 /**
@@ -264,8 +296,10 @@ export interface WorldState {
   /** Number of ticks simulated so far. See systems/time.ts for conventions. */
   tick: number
   rng: RngState
-  /** Next id to hand out; shared by citizens, structures and events. */
+  /** Next id to hand out; shared by citizens, structures and memories. */
   nextId: number
+  /** Next event id (schema v6+). Events have their own counter so new event kinds never shift entity ids. */
+  nextEventId: number
   map: TileMap
   /** Sorted by id. Dead citizens stay in the list with alive = false. */
   citizens: Citizen[]
@@ -276,4 +310,5 @@ export interface WorldState {
   history: HistorySample[]
   /** Oldest first; capped at MAX_EVENTS. */
   events: SimEvent[]
+  ecology: EcologyState
 }

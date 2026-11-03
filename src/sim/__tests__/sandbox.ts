@@ -28,7 +28,17 @@ export function sandbox(
   state.config = { ...state.config, width: map.width, height: map.height }
   state.structures[0]!.tile = toIndex(opts.camp[0], opts.camp[1], map.width)
   state.stockpile = { food: opts.food ?? 0, wood: opts.wood ?? 0 }
-  state.ledger = { foodGathered: 0, woodGathered: 0, foodRegrown: 0, woodRegrown: 0, foodEaten: 0, foodLost: 0, woodLost: 0 }
+  state.ledger = {
+    foodGathered: 0,
+    woodGathered: 0,
+    foodRegrown: 0,
+    woodRegrown: 0,
+    foodEaten: 0,
+    foodLost: 0,
+    woodLost: 0,
+    foodDecayed: 0,
+    woodDecayed: 0,
+  }
   state.events = []
   state.citizens.forEach((c, i) => {
     const spec = opts.citizens[i]!
