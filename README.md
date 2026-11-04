@@ -111,7 +111,10 @@ The village is no longer fixed at twelve. Ages are counted in world years
 - **Partners:** adults who like and know each other well become partners.
 - **Children:** a couple with a home, while the village has food to spare
   (3 per person in the stockpile), may have a child — at most one a year
-  each, and never beyond 60 villagers. A full home is no obstacle: the
+  each, and never beyond 60 villagers. In new worlds a child also needs
+  land to live on: at least one fruiting berry bush on known land per
+  villager (the newborn included), so a village stops growing before it
+  strips the island bare. A full home is no obstacle: the
   child squeezes in, and the builders plan another shelter.
 - **Childhood:** children eat (less than adults), sleep at home, play near
   the campfire and chat. They come of age at **5** and take up work; if

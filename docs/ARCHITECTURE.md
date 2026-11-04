@@ -152,7 +152,9 @@ positions above as their milestones land.
 - Dawn pass, ascending ids: birthdays → explorer staffing → partnerships (mutual affinity and
   familiarity ≥ 30, not kin) → births (fertile 16–42, a home below 3 + 2
   residents, food ≥ 3 × living, < 60 living, a year since each parent's
-  last child, 40‰) → `assignHomes` → archive (dead > 48 days ago; ≤ 400).
+  last child, 40‰; fast profile also ≥ 1 bearing berry bush — young,
+  mature or old — on discovered land per person, newborn included,
+  `birthBushesPerPersonPermille`) → `assignHomes` → archive (dead > 48 days ago; ≤ 400).
   All randomness from `state.population.rng`.
 - Children only eat, rest, socialize and wander (within 4 of the campfire);
   their satiety decays at 0.6×. The jitter for every action is still drawn,
