@@ -15,19 +15,19 @@ const S4 = 'var(--series-4)'
 
 interface Props {
   controller: SimulationController
-  /** Samples known to the latest snapshot, and the world id: the charts re-render only when these change. */
-  historyLength: number
+  /** Newest sample tick known to the latest snapshot, and the world id: the charts re-render only when these change. */
+  historyTick: number
   worldId: number
 }
 
 /** Memoised: re-renders only when a history sample is recorded (or a different world is loaded). */
-export const HistoryCharts = memo(function HistoryCharts({ controller, historyLength, worldId }: Props) {
+export const HistoryCharts = memo(function HistoryCharts({ controller, historyTick, worldId }: Props) {
   const [table, setTable] = useState(false)
   const [view, setView] = useState<'recent' | 'generations'>('recent')
   const state = controller.state
   void worldId
   const data = useMemo(() => {
-    const h = getHistory(state).slice(0, historyLength)
+    const h = getHistory(state).filter((s) => s.tick <= historyTick)
     const total = state.map.discovered.length
     const ticks = h.map((s) => s.tick)
     return {
@@ -50,7 +50,7 @@ export const HistoryCharts = memo(function HistoryCharts({ controller, historyLe
       births: h.map((s) => s.births ?? null),
       deaths: h.map((s) => s.deaths ?? null),
     }
-  }, [state, historyLength])
+  }, [state, historyTick])
 
   const formatX = (t: number) => formatTick(t).replace(' · ', ' ')
   const common = { ticks: data.ticks, formatX, formatTooltip: formatCalendarTick, markers: data.seasons }
@@ -74,7 +74,7 @@ export const HistoryCharts = memo(function HistoryCharts({ controller, historyLe
         </div>
       </div>
       {view === 'generations' ? (
-        <GenerationsView state={state} version={historyLength} />
+        <GenerationsView state={state} version={historyTick} />
       ) : data.samples.length < 2 ? (
         <p className="empty">
           History builds up as the village lives: a snapshot is recorded every {HISTORY_INTERVAL} ticks.

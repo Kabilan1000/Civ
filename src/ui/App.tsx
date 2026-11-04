@@ -110,7 +110,7 @@ export default function App() {
           <MapView controller={controller} aspect={`${width} / ${height}`} selectedId={selectedId} onSelect={select} />
           <div className="below-map">
             <EventFeed controller={controller} lastEventId={snapshot.lastEventId} worldId={snapshot.worldId} onSelect={select} />
-            <HistoryCharts controller={controller} historyLength={snapshot.historyLength} worldId={snapshot.worldId} />
+            <HistoryCharts controller={controller} historyTick={snapshot.historyTick} worldId={snapshot.worldId} />
           </div>
         </div>
         <aside className="sidebar">

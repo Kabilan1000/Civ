@@ -59,8 +59,11 @@ export interface SimulationSnapshot {
   stats: CivStats
   /** Id of the newest stored event (changes only when events are added). */
   lastEventId: number
-  /** Number of history samples (changes only when a sample is recorded). */
-  historyLength: number
+  /**
+   * Tick of the newest history sample (changes exactly when a sample is
+   * recorded — unlike the sample count, which stops changing at HISTORY_MAX).
+   */
+  historyTick: number
   /** Increments whenever the world object is replaced (load / restart). */
   worldId: number
   seed: string
@@ -237,7 +240,7 @@ export class SimulationController {
       speed: this.speed,
       stats: getCivStats(this.world),
       lastEventId: this.world.events.at(-1)?.id ?? 0,
-      historyLength: this.world.history.length,
+      historyTick: this.world.history.at(-1)?.tick ?? -1,
       worldId: this.worldId,
       seed: this.world.config.seed,
       unsaved: this.world.tick !== this.savedTick,

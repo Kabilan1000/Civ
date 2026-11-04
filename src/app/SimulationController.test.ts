@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createWorld, deserialize, serialize, stepN } from '../sim/index.ts'
+import { createWorld, deserialize, HISTORY_INTERVAL, HISTORY_MAX, serialize, stepN } from '../sim/index.ts'
 import { MAX_TICKS_PER_FRAME, SimulationController, type FrameScheduler } from './SimulationController.ts'
 
 /** Manual frame scheduler: frames fire only when the test calls runFrame(). */
@@ -191,6 +191,22 @@ describe('SimulationController', () => {
     // The loaded world continues exactly as the original would.
     stepN(saved, 5)
     expect(serialize(ctrl.state)).toBe(serialize(saved))
+  })
+
+  it('signals every new history sample, also once the history is full (HISTORY_MAX)', () => {
+    const { fake, ctrl } = make()
+    const full = createWorld({ seed: 'full-history' })
+    stepN(full, HISTORY_MAX * HISTORY_INTERVAL + 5)
+    expect(full.history).toHaveLength(HISTORY_MAX)
+    ctrl.loadWorld(full)
+    const before = ctrl.getSnapshot().historyTick
+    expect(before).toBe(full.history.at(-1)!.tick)
+    ctrl.setSpeed(100)
+    ctrl.togglePause()
+    ctrl.start()
+    fake.runFor(1000) // ~500 ticks: about 20 more samples, the count unchanged
+    expect(ctrl.state.history).toHaveLength(HISTORY_MAX)
+    expect(ctrl.getSnapshot().historyTick).toBeGreaterThan(before)
   })
 
   it('tracks unsaved progress', () => {
