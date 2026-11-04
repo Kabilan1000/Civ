@@ -1,5 +1,6 @@
 // Read-only helpers for the UI and renderer. Never mutate state here.
-import { FRIENDSHIP_AFFINITY, MAX_EVENTS, RIVALRY_AFFINITY, SHELTER_CAPACITY, TICKS_PER_SEASON, type DayPhase } from './constants.ts'
+import { FRIENDSHIP_AFFINITY, MAX_EVENTS, RIVALRY_AFFINITY, SHELTER_CAPACITY, TICKS_PER_DAY, TICKS_PER_SEASON, type DayPhase } from './constants.ts'
+import { ecoCensus } from './ecology/census.ts'
 import { stepCost, toPoint } from './grid.ts'
 import { ageYears, lifeStage, type LifeStage } from './citizens/life.ts'
 import { FRESHNESS_STALE, freshnessOf } from './map/visibility.ts'
@@ -9,6 +10,7 @@ import type {
   ActionKind,
   ActionScore,
   Citizen,
+  EcoSample,
   GenerationSample,
   HistorySample,
   Memory,
@@ -447,6 +449,8 @@ export interface GenerationRow extends GenerationSample {
   seasonBirths: number | null
   seasonDeaths: number | null
   net: number | null
+  /** Couple-days held back by the land during this season (v13); null where either summary predates the tally. */
+  seasonHeld: number | null
 }
 
 /**
@@ -459,8 +463,58 @@ export function getGenerations(state: WorldState): GenerationRow[] {
     const prev = i > 0 ? state.generations[i - 1]! : g.tick === TICKS_PER_SEASON ? { births: 0, deaths: 0 } : null
     const seasonBirths = prev ? g.births - prev.births : null
     const seasonDeaths = prev ? g.deaths - prev.deaths : null
-    return { ...g, seasonBirths, seasonDeaths, net: prev ? seasonBirths! - seasonDeaths! : null }
+    const prevHeld = i > 0 ? state.generations[i - 1]!.held : g.tick === TICKS_PER_SEASON ? 0 : undefined
+    const seasonHeld = g.held !== undefined && prevHeld !== undefined ? g.held - prevHeld : null
+    return { ...g, seasonBirths, seasonDeaths, net: prev ? seasonBirths! - seasonDeaths! : null, seasonHeld }
   })
+}
+
+/** One day of the ecology record (schema v13): the dawn census plus what happened since the previous dawn. */
+export interface EcoDay extends EcoSample {
+  /** Per-day figures since the previous dawn's census; null when that census is missing (the first day kept, or a gap). */
+  bushBirths: number | null
+  bushDeaths: number | null
+  treeBirths: number | null
+  treeDeaths: number | null
+  /** Berries picked by foragers, regrown on bushes, and lost when bushes died. */
+  picked: number | null
+  regrownToday: number | null
+  lost: number | null
+  trips: number | null
+  /** Average walking steps to the bush per forage trip (one decimal); null with no trips. */
+  tripSteps: number | null
+  resurveysToday: number | null
+  heldToday: number | null
+}
+
+/** The daily ecology record with per-day differences, oldest first. Never interpolates. */
+export function getEcoDays(state: WorldState): EcoDay[] {
+  return state.ecoHistory.map((e, i) => {
+    const p = i > 0 ? state.ecoHistory[i - 1]! : null
+    const ok = p !== null && e.tick - p.tick === TICKS_PER_DAY
+    const d = (now: number, before: number | undefined) => (ok ? now - before! : null)
+    const trips = d(e.forageTrips, p?.forageTrips)
+    const steps = d(e.forageSteps, p?.forageSteps)
+    return {
+      ...e,
+      bushBirths: d(e.plantBirths.berries, p?.plantBirths.berries),
+      bushDeaths: d(e.plantDeaths.berries, p?.plantDeaths.berries),
+      treeBirths: d(e.plantBirths.wood, p?.plantBirths.wood),
+      treeDeaths: d(e.plantDeaths.wood, p?.plantDeaths.wood),
+      picked: d(e.gathered, p?.gathered),
+      regrownToday: d(e.regrown, p?.regrown),
+      lost: d(e.decayed, p?.decayed),
+      trips,
+      tripSteps: trips !== null && trips > 0 ? Math.round((steps! * 10) / trips) / 10 : null,
+      resurveysToday: d(e.resurveys, p?.resurveys),
+      heldToday: d(e.held, p?.held),
+    }
+  })
+}
+
+/** The ecology census right now (the same figures the dawn record stores). */
+export function getEcologyNow(state: WorldState): EcoSample {
+  return ecoCensus(state)
 }
 
 export function getHistory(state: WorldState): readonly HistorySample[] {

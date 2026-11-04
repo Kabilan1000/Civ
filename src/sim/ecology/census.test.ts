@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { sandbox } from '../__tests__/sandbox.ts'
 import { ECO_HISTORY_MAX, FOG_FULL_DAYS, NEAR_CAMP_TILES, TICKS_PER_DAY } from '../constants.ts'
-import { plantCensus } from '../selectors.ts'
+import { getEcoDays, getEcologyNow, getGenerations, plantCensus } from '../selectors.ts'
 import { deserialize, serialize } from '../serialize.ts'
 import { bearingBushes } from '../systems/lifecycle.ts'
 import type { WorldState } from '../types.ts'
@@ -147,5 +147,41 @@ describe('activity tallies (M10d) count real events only', () => {
       }
     }
     expect(strip(b)).toBe(strip(a))
+  })
+})
+
+describe('ecology selectors (M10d)', () => {
+  it('per-day figures are differences of consecutive dawn censuses; the first day and gaps are null', () => {
+    const s = createWorld({ seed: 'eco-days' })
+    stepN(s, 12 * DAY)
+    const days = getEcoDays(s)
+    expect(days).toHaveLength(13)
+    expect(days[0]!.picked).toBeNull()
+    for (let i = 1; i < days.length; i++) {
+      const [p, e] = [s.ecoHistory[i - 1]!, s.ecoHistory[i]!]
+      expect(days[i]!.picked).toBe(e.gathered - p.gathered)
+      expect(days[i]!.bushDeaths).toBe(e.plantDeaths.berries - p.plantDeaths.berries)
+      expect(days[i]!.lost).toBe(e.decayed - p.decayed)
+      expect(days[i]!.trips).toBe(e.forageTrips - p.forageTrips)
+      const trips = e.forageTrips - p.forageTrips
+      expect(days[i]!.tripSteps).toBe(trips > 0 ? Math.round(((e.forageSteps - p.forageSteps) * 10) / trips) / 10 : null)
+    }
+    // Total berries picked over the record = the ledger's gathered food since the first census.
+    expect(days.reduce((n, d) => n + (d.picked ?? 0), 0)).toBe(s.ledger.foodGathered - s.ecoHistory[0]!.gathered)
+    s.ecoHistory.splice(5, 1) // a missing day is a gap, never bridged
+    expect(getEcoDays(s)[5]!.picked).toBeNull()
+    expect(getEcologyNow(s)).toEqual(ecoCensus(s))
+  })
+
+  it('per-season births held by the land: differences of summaries that both carry the tally', () => {
+    const s = createWorld({ seed: 'eco-seasons' })
+    stepN(s, 3 * 12 * DAY)
+    s.generations[0]!.held = 0
+    s.generations[1]!.held = 4
+    s.generations[2]!.held = 9
+    const rows = getGenerations(s)
+    expect(rows.map((r) => r.seasonHeld)).toEqual([0, 4, 5])
+    delete s.generations[1]!.held // as in a summary taken before v13
+    expect(getGenerations(s).map((r) => r.seasonHeld)).toEqual([0, null, null])
   })
 })
