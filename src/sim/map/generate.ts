@@ -134,6 +134,7 @@ export function generateTerrain(rng: RngState, width: number, height: number): T
     terrain,
     resources: new Array<null>(size).fill(null),
     discovered: new Array<0 | 1>(size).fill(0),
+    lastSeen: new Array<number>(size).fill(-1),
     version: 0,
   }
   for (let i = 0; i < size; i++) if (isBorder(map, i)) terrain[i] = 'water'

@@ -41,9 +41,12 @@ import {
   type Terrain,
   type TileMap,
   type WorldState,
+  freshnessMap,
   lifeStage,
+  OBSERVE_INTERVAL,
   type LifeStage,
 } from '../sim/index.ts'
+import { FOG_ALPHA } from './fogLevels.ts'
 import type { FrameRenderer } from '../app/SimulationController.ts'
 import { AppLifecycle } from './AppLifecycle.ts'
 import { BakedLayer } from './BakedLayer.ts'
@@ -54,6 +57,13 @@ import { AdaptiveQuality, qualityLevels } from './quality.ts'
 import { pickCitizen, screenToWorld, type RenderedCitizen } from './selection.ts'
 import { WorldChangeTracker } from './worldChange.ts'
 import { COLORS, ROLE_COLORS, TERRAIN_COLORS, TILE_SIZE, shade, tileNoise } from './palette.ts'
+
+/**
+ * Real-time throttle for fog re-checks (ms). A fog change re-bakes the map
+ * texture (terrain + fog): measured, that beats a separate fog layer, whose
+ * extra full-map fill every frame cost more on software GPUs.
+ */
+const FOG_CHECK_MS = 3000
 
 /** Children are drawn at this scale (Population V1). */
 const CHILD_SCALE = 0.65
@@ -88,7 +98,7 @@ function bubbleTint(state: WorldState, c: Citizen): number | null {
   return null
 }
 
-function sameArray<T>(a: readonly T[], b: readonly T[]): boolean {
+function sameArray<T>(a: ArrayLike<T>, b: ArrayLike<T>): boolean {
   if (a.length !== b.length) return false
   for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false
   return true
@@ -134,6 +144,10 @@ export class WorldRenderer implements FrameRenderer {
   private readonly citizens = new Container()
   private readonly lights = new Container()
   private readonly selectionRing = new Graphics()
+  /** Freshness of every tile as last drawn (schema v9). */
+  private freshness: Uint8Array = new Uint8Array(0)
+  private fogTick = -Infinity
+  private fogCheckedAt = -Infinity
   private readonly citizenViews = new Map<number, CitizenView>()
   private readonly renderedCitizens: RenderedCitizen[] = []
   private fit: WorldFit = { scale: 1, x: 0, y: 0 }
@@ -264,7 +278,7 @@ export class WorldRenderer implements FrameRenderer {
       this.bakedScale = fit.scale
       this.bakeMap()
       this.resources.buildTextures(app.renderer, this.displayResolution)
-      this.resources.sync(this.mapRef)
+      this.resources.sync(this.mapRef, this.freshness)
     }
   }
 
@@ -306,6 +320,8 @@ export class WorldRenderer implements FrameRenderer {
       this.mapVersion = state.map.version
       this.snapshotMap(state.map)
       this.drawTerrain(state.map)
+      this.freshness = freshnessMap(state.map, state.tick)
+      this.fogTick = state.tick
       this.drawFog(state.map)
       this.resources.clear()
       this.bakedScale = 0
@@ -317,11 +333,15 @@ export class WorldRenderer implements FrameRenderer {
       if (terrainChanged || fogChanged) {
         this.snapshotMap(state.map)
         if (terrainChanged) this.drawTerrain(state.map)
-        if (fogChanged) this.drawFog(state.map)
+        if (fogChanged) {
+          this.freshness = freshnessMap(state.map, state.tick)
+          this.drawFog(state.map)
+        }
         this.bakeMap()
       }
-      this.resources.sync(state.map)
+      this.resources.sync(state.map, this.freshness)
     }
+    if (state.map === this.mapRef) this.refreshFog(state)
 
     const key = state.structures.map((s) => `${s.id}:${s.kind}:${s.tile}:${s.stage}:${s.woodDelivered}:${Math.floor((s.buildProgress / Math.max(1, s.buildCost)) * 4)}`).join('|')
     if (key !== this.structuresKey) {
@@ -355,13 +375,32 @@ export class WorldRenderer implements FrameRenderer {
     this.discoveredCopy = [...map.discovered]
   }
 
+  /** Fog by freshness (schema v9): clear where observed, thickening where unseen, full where never discovered. */
   private drawFog(map: TileMap): void {
     const g = this.fog.clear()
-    map.discovered.forEach((d, i) => {
-      if (d === 1) return
+    this.freshness.forEach((f, i) => {
+      if (f === 0) return
       const { x, y } = toPoint(i, map.width)
-      g.rect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE).fill({ color: COLORS.fog, alpha: COLORS.fogAlpha })
+      g.rect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE).fill({ color: COLORS.fog, alpha: FOG_ALPHA[f]! })
     })
+  }
+
+  /**
+   * Freshness changes with time, not with map.version. Re-check at most once per
+   * observation interval of sim time and every FOG_CHECK_MS of real time, and
+   * re-bake only if some tile's level changed — rare even at 100×.
+   */
+  private refreshFog(state: WorldState): void {
+    const now = performance.now() // rendering only
+    if (Math.abs(state.tick - this.fogTick) < OBSERVE_INTERVAL || now - this.fogCheckedAt < FOG_CHECK_MS) return
+    this.fogTick = state.tick
+    this.fogCheckedAt = now
+    const next = freshnessMap(state.map, state.tick)
+    if (sameArray(this.freshness, next)) return
+    this.freshness = next
+    this.drawFog(state.map)
+    this.bakeMap() // fog lives in the baked map texture: no extra full-map layer to fill each frame
+    this.resources.sync(state.map, this.freshness)
   }
 
   /** Feed the frame interval to the quality controller; apply a change (rare) by re-fitting. */

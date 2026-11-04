@@ -979,6 +979,38 @@ allowed):
 - Archiving prunes relationships and keeps saves bounded.
 - No citizen is left without a decision after a stage change.
 
+## 9. Returning fog of war and autonomous resurveying (schema v9)
+
+A separate feature after M10c. The design is in ARCHITECTURE §3.4c.
+`map.discovered` stays permanent, and a per-tile `lastSeen` tick drives the
+freshness levels: observed, recent, fading, stale and unknown. Migration
+v8 → v9 marks all discovered land as seen at the save's tick, so the fog
+returns gradually. It was tested on a real v8 save written by the M10c
+build.
+
+**Implementation finding.** Coastal frontiers keep a few unknown water
+tiles within reach forever, so at first explorers clung to these
+near-worthless frontiers and never resurveyed (0 resurveys, 47% of land
+stale by day 120). Frontiers now count only if they reveal at least
+`RESURVEY_MIN_GAIN` tiles.
+
+**Results** (8 worlds plus the 12/30/60 checkpoints × 120 days):
+
+- 154–244 resurveys per run; peak stale share 1–4%.
+- 0 needs deaths; plants, food and populations as in M10c.
+- Discovery never shrank, and inhabited structures always stayed in view.
+- Conservation held every tick, and save/resume was exact.
+
+**Known issue:** the mature 60-citizen checkpoint has no adult explorers.
+The founding explorers died, and the newborn explorer cap of 2 counts
+explorer children. Its fog therefore builds to 22% stale until those
+children come of age. The proposed fix belongs to Population: assign roles
+at coming of age, by the adult workforce.
+
+**Performance** (Node step, measured back to back with M10c): +0.05, +0.01
+and +0.07 ms/tick at 12, 30 and 60 citizens. Browser at 100×: 473/441/367
+ticks/s against M10c's 481/453/385; p95 frame 50/67/67 ms against 50/50/67.
+
 ## Change log
 
 **Revision 2:**

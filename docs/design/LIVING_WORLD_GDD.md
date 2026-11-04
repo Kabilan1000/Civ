@@ -623,7 +623,9 @@ citizen before populations exceed about 30. The dead are archived. See TDS
 | M10b — Plant life cycle | **checkpoint** (schema v6; senescence gated off; sprites and seedling site claim not done) |
 | **Population V1** | **next** (schema v7; TDS §8) |
 | M10c — Dispersal, habitat, recovery | after Population V1 (re-enables senescence together with reproduction) |
-| M10d — Ecology dashboard | after M10c |
+| M10c — Living ecology | done (schema v8) |
+| Returning fog & autonomous resurveying | done (schema v9; separate feature, TDS §9) |
+| M10d — Ecology dashboard | next |
 | M11+ | re-planned after Population V1 (seasons that matter, settlement wear, Hand phase) |
 
 The original M10–M14 plan follows for reference.

@@ -4,7 +4,8 @@
 // is one batched draw call of tiny quads (cheap fill even on software GPUs).
 
 import { Container, Graphics, Rectangle, Sprite, Texture, type Renderer } from 'pixi.js'
-import { toPoint, type TileMap } from '../sim/index.ts'
+import { FRESHNESS_UNKNOWN, toPoint, type Freshness, type TileMap } from '../sim/index.ts'
+import { remembersAt, spriteView } from './fogLevels.ts'
 import { ALL_KEYS, levelKey, parseKey, TREE_LEVELS, type LevelKey } from './plantLevels.ts'
 import { COLORS, TILE_SIZE, shade } from './palette.ts'
 
@@ -77,6 +78,8 @@ export class ResourceSprites {
   readonly container = new Container()
   private readonly textures = new Map<LevelKey, Texture>()
   private readonly sprites = new Map<number, NodeSprite>()
+  /** What each tile looked like when last seen (null: no plant), for stale fog. */
+  private readonly seen = new Map<number, LevelKey | null>()
 
   /** (Re)render the shared level textures at a display resolution. */
   buildTextures(renderer: Renderer, resolution: number): void {
@@ -94,38 +97,48 @@ export class ResourceSprites {
     for (const t of old) t.destroy(true)
   }
 
-  /** Match sprites to the map: create, retexture, dim under fog, remove. */
-  sync(map: TileMap): void {
+  /**
+   * Match sprites to the map: create, retexture, fade under the returning fog,
+   * remove. `freshness` (schema v9) is per tile; under stale fog a tile shows
+   * what was last seen there (render/fogLevels.ts) — this memory is renderer
+   * state only and never enters the simulation.
+   */
+  sync(map: TileMap, freshness: Uint8Array): void {
     if (this.textures.size === 0) return
-    map.resources.forEach((node, i) => {
+    for (let i = 0; i < map.resources.length; i++) {
+      const node = map.resources[i]
+      const f = freshness[i] as Freshness
+      const current = node ? levelKey(node) : null
+      if (remembersAt(f)) this.seen.set(i, current)
+      const view = f === FRESHNESS_UNKNOWN ? { key: current, alpha: FOG_VISIBILITY } : spriteView(f, current, this.seen.get(i))
       let entry = this.sprites.get(i)
-      if (!node) {
+      if (view.key === null) {
         if (entry) {
           entry.sprite.destroy()
           this.sprites.delete(i)
         }
-        return
+        continue
       }
-      const key = levelKey(node)
       if (!entry) {
         const { x, y } = toPoint(i, map.width)
-        const sprite = new Sprite(this.textures.get(key)!)
+        const sprite = new Sprite(this.textures.get(view.key)!)
         sprite.position.set(x * TILE_SIZE, y * TILE_SIZE)
         this.container.addChild(sprite)
-        entry = { sprite, key }
+        entry = { sprite, key: view.key }
         this.sprites.set(i, entry)
-      } else if (entry.key !== key) {
-        entry.key = key
-        entry.sprite.texture = this.textures.get(key)!
+      } else if (entry.key !== view.key) {
+        entry.key = view.key
+        entry.sprite.texture = this.textures.get(view.key)!
       }
-      entry.sprite.alpha = map.discovered[i] === 1 ? 1 : FOG_VISIBILITY
-    })
+      entry.sprite.alpha = view.alpha
+    }
   }
 
   /** Drop all sprites (e.g. when a different world is loaded). */
   clear(): void {
     for (const { sprite } of this.sprites.values()) sprite.destroy()
     this.sprites.clear()
+    this.seen.clear()
   }
 
   destroy(): void {

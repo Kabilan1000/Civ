@@ -25,6 +25,7 @@ export function asciiMap(rows: string[]): TileMap {
     resources: rows.join('').split('').map((ch) =>
       ch === 'b' ? plantNode('berries') : ch === 'T' ? plantNode('wood') : null),
     discovered: terrain.map(() => 0 as const),
+    lastSeen: terrain.map(() => -1),
     version: 0,
   }
 }

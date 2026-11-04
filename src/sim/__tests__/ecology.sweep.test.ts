@@ -3,6 +3,9 @@ import { performance } from 'node:perf_hooks'
 import { describe, expect, it } from 'vitest'
 import { getCampTile } from '../ai/context.ts'
 import { safetyCap } from '../ecology/habitat.ts'
+import { revealGain } from '../ai/actions/explore.ts'
+import { FOG_FULL_DAYS } from '../constants.ts'
+import { freshnessOf } from '../map/visibility.ts'
 import { isPassable } from '../grid.ts'
 import { distanceField } from '../path/flood.ts'
 import { deserialize, serialize } from '../serialize.ts'
@@ -74,6 +77,9 @@ describe.skipIf(!RUN)('ecology sweep', () => {
       let steps: Int32Array = new Int32Array(0)
       let simMs = 0
       const camp = getCampTile(s)!
+      let discovered = s.map.discovered.filter((d) => d === 1).length
+      let resurveys = 0
+      let maxStale = 0
       for (let t = 1; t <= DAYS * 240; t++) {
         const before = s.ecology.counters.deaths.berries + s.ecology.counters.deaths.wood
         const t0 = performance.now()
@@ -86,6 +92,7 @@ describe.skipIf(!RUN)('ecology sweep', () => {
           if (!isPassable(s.map, x.pos.y * s.map.width + x.pos.x)) bad.push(`t${s.tick}: ${x.name} off land`)
           if (x.needs.satiety < minSatiety) minSatiety = x.needs.satiety
           // Foraging distance: walk steps from camp to each newly chosen bush.
+          if (x.task?.kind === 'explore' && x.task.startedTick === s.tick && x.task.targetTile !== null && revealGain(s.map, x.task.targetTile) === 0) resurveys++
           if (x.task?.kind === 'forage' && x.task.startedTick === s.tick && x.task.targetTile !== null && steps.length) {
             const d = steps[x.task.targetTile]!
             if (d >= 0) {
@@ -102,6 +109,15 @@ describe.skipIf(!RUN)('ecology sweep', () => {
         worstDawnDeathShare = Math.max(worstDawnDeathShare, died / Math.max(1, plants.bushes + plants.trees + died))
         if (plants.bushes >= safetyCap(s.map, 'berries') || plants.trees + plants.deadwood >= safetyCap(s.map, 'wood')) capHit = true
         bad.push(...plantViolations(s, true))
+        // Returning fog: discovery never shrinks; the inhabited settlement stays in view.
+        const nowDiscovered = s.map.discovered.filter((d) => d === 1).length
+        if (nowDiscovered < discovered) bad.push(`t${s.tick}: discovery shrank`)
+        discovered = nowDiscovered
+        for (const st of s.structures) {
+          const inhabited = st.kind === 'campfire' || (st.stage === 'complete' && st.residentIds.length > 0)
+          if (inhabited && freshnessOf(1, s.map.lastSeen[st.tile]!, s.tick) > 1) bad.push(`t${s.tick}: inhabited structure ${st.id} out of view`)
+        }
+        maxStale = Math.max(maxStale, s.map.lastSeen.filter((v, i) => s.map.discovered[i] === 1 && s.tick - v >= FOG_FULL_DAYS * 240).length / nowDiscovered)
         steps = distanceField(s.map, camp, (i) => s.map.discovered[i] === 1)
         let near = 0
         s.map.resources.forEach((r, i) => {
@@ -128,6 +144,7 @@ describe.skipIf(!RUN)('ecology sweep', () => {
       console.log(
         `${c.name.padEnd(12)} pop ${pop0}→${living} (needs deaths ${needsDeaths}, old age ${s.population.counters.oldAgeDeaths - old0}) | min satiety ${minSatiety.toFixed(0)} | food min ${minFood}\n` +
           `             bushes ${c0.bushes}→${c1.bushes} trees ${c0.trees}→${c1.trees} deadwood ${c1.deadwood} | plant births b${eco.births.berries - eco0.births.berries}/t${eco.births.wood - eco0.births.wood} deaths b${eco.deaths.berries - eco0.deaths.berries}/t${eco.deaths.wood - eco0.deaths.wood} fallen ${eco.fallenFruitSprouts - eco0.fallenFruitSprouts} | worst dawn deaths ${(worstDawnDeathShare * 100).toFixed(0)}% | cap hit ${capHit}\n` +
+          `             fog: ${resurveys} resurveys, peak stale share ${(maxStale * 100).toFixed(0)}%\n` +
           `             forage trip steps mean ${mean(tripSteps)} by decade [${tripByDecade.map(mean).join(' ')}] | forage-near-camp zero episodes ${zeroEpisodes}, longest ${longestZero}d | ${(simMs / (DAYS * 240)).toFixed(3)} ms/tick\n` +
           `             ${traj.join(' ')}`,
       )

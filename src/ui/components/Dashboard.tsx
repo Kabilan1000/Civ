@@ -1,5 +1,5 @@
 import type { SimulationSnapshot } from '../../app/SimulationController.ts'
-import { ADULT_AGE, ELDER_AGE, MAX_POPULATION } from '../../sim/index.ts'
+import { ADULT_AGE, ELDER_AGE, FOG_CLEAR_DAYS, FOG_FULL_DAYS, MAX_POPULATION } from '../../sim/index.ts'
 import { calendarHint, formatDate } from '../format/calendar.ts'
 import { Meter } from './Meter.tsx'
 
@@ -42,7 +42,12 @@ export function Dashboard({ snapshot }: { snapshot: SimulationSnapshot }) {
           sub={`${s.shelters.complete} shelters${building ? ` · ${building} building` : ''}`}
           hint="Citizens with a home / beds in completed shelters"
         />
-        <Stat label="Explored" value={`${s.exploredPercent.toFixed(0)}%`} sub={`${s.discoveredTiles} of ${s.totalTiles} tiles`} hint="Share of the map that has been discovered" />
+        <Stat
+          label="Explored"
+          value={`${s.exploredPercent.toFixed(0)}%`}
+          sub={`${s.freshPercent}% fresh · ${s.stalePercent}% stale`}
+          hint={`${s.discoveredTiles} of ${s.totalTiles} tiles discovered — the island's shape is never forgotten. Land nobody has seen for ${FOG_CLEAR_DAYS} days starts to fade, and after ${FOG_FULL_DAYS} days the fog returns: the map shows it as it was last seen, while it keeps changing underneath. Villagers keep their surroundings and the settlement in view; explorers resurvey stale land. Clear = in view, faint = seen recently, hazy = fading or stale, dark = never discovered.`}
+        />
         <Stat label="Bonds" value={`${s.friendships} · ${s.rivalries}`} sub="friends · rivals" hint="Friendships: both like each other (affinity ≥ 50). Rivalries: either resents the other (≤ −40)." />
         <Stat
           label="Ages"

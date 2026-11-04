@@ -45,8 +45,10 @@ export interface TileMap {
   /** Length width * height, indexed by TileIndex. */
   terrain: Terrain[]
   resources: (ResourceNode | null)[]
-  /** Civilization-wide fog of war: 1 = discovered. */
+  /** Permanent discovery (terrain and connectivity are never forgotten): 1 = discovered. */
   discovered: (0 | 1)[]
+  /** Tick each tile was last observed (schema v9), or −1 if never. Freshness fades; discovery does not. */
+  lastSeen: number[]
   /** Incremented on any map change so renderers can re-bake cached layers. */
   version: number
 }

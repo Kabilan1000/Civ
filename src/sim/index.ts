@@ -23,4 +23,6 @@ export {
 export type { CalendarDate } from './calendar.ts'
 export { ageYears, isChild, lifeStage, lifeStageAt, oldAgeHazardPermille } from './citizens/life.ts'
 export type { LifeStage } from './citizens/life.ts'
+export { FRESHNESS_STALE, FRESHNESS_UNKNOWN, freshnessMap, freshnessOf } from './map/visibility.ts'
+export type { Freshness } from './map/visibility.ts'
 export { toIndex, toPoint } from './grid.ts'

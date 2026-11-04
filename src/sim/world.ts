@@ -13,6 +13,7 @@ import { updateNeeds } from './systems/needs.ts'
 import { assignInitialAges } from './ecology/flora.ts'
 import { DEFAULT_ECOLOGY_RULES, updateEcology, type EcologyRules } from './systems/ecology.ts'
 import { updateLifeCycle } from './systems/lifecycle.ts'
+import { updateObservation } from './systems/observation.ts'
 import { advanceTasks } from './systems/tasks.ts'
 import { advanceTime } from './systems/time.ts'
 import type { Structure, TileIndex, WorldConfig, WorldState } from './types.ts'
@@ -44,6 +45,7 @@ export function createWorld(overrides: Partial<WorldConfig> = {}): WorldState {
     spawnTiles: config.citizenCount,
   })
   revealAround(map, campTile, START_DISCOVERY_RADIUS)
+  map.discovered.forEach((d, i) => d === 1 && (map.lastSeen[i] = 0)) // the start area is seen at tick 0
   assignInitialAges(map, config.seed) // own derived stream: placement is unchanged
 
   const state: WorldState = {
@@ -96,7 +98,8 @@ export function createWorld(overrides: Partial<WorldConfig> = {}): WorldState {
 /**
  * Advance the world by exactly one tick, mutating it in place.
  * System order is fixed (see docs/ARCHITECTURE.md §3.4):
- * time → needs (incl. health, death) → ecology → life cycle (dawn) → construction → decide → act → history.
+ * time → needs (incl. health, death) → ecology → life cycle (dawn) → construction → decide → act →
+ * observation → history.
  * Social and stats systems (M6/M7) will follow act.
  */
 export function step(state: WorldState): void {
@@ -111,9 +114,11 @@ export interface SimRules {
    * turn it off to prove everything else still behaves exactly like v0.1.
    */
   population: boolean
+  /** Explorers resurvey stale land once nothing is left to discover (schema v9). */
+  resurvey: boolean
 }
 
-export const DEFAULT_SIM_RULES: Readonly<SimRules> = { ecology: DEFAULT_ECOLOGY_RULES, population: true }
+export const DEFAULT_SIM_RULES: Readonly<SimRules> = { ecology: DEFAULT_ECOLOGY_RULES, population: true, resurvey: true }
 
 /**
  * step() with explicit rules — e.g. plant senescence on, which stays off by
@@ -125,8 +130,9 @@ export function stepWithRules(state: WorldState, rules: Readonly<SimRules>): voi
   updateEcology(state, rules.ecology)
   if (rules.population) updateLifeCycle(state)
   updateConstruction(state, { headroom: rules.population })
-  decide(state)
+  decide(state, { resurvey: rules.resurvey })
   advanceTasks(state)
+  updateObservation(state)
   recordHistory(state)
 }
 

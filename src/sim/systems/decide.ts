@@ -39,11 +39,12 @@ function waivesMargin(c: Citizen, challenger: ActionKind, score: number, current
   return score >= URGENT_SCORE || isCritical(c, challenger)
 }
 
-export function decide(state: WorldState): void {
+export function decide(state: WorldState, opts: { resurvey?: boolean } = {}): void {
   for (const c of state.citizens) {
     if (!c.alive || state.tick < c.nextDecisionTick) continue
 
     const ctx = buildContext(state, c)
+    ctx.resurvey = opts.resurvey ?? true
     const scores = scoreActions(ctx)
     c.lastScores = scores
     c.lastDecisionTick = state.tick

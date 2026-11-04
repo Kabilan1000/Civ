@@ -39,7 +39,9 @@ export interface DecisionContext {
   site: Structure | null
   siteWorkTile: Target | null
   /** Lazily computed by ai/actions/explore.ts (undefined = not yet computed). */
-  frontierMemo?: { tile: TileIndex; steps: number; gain: number } | null
+  frontierMemo?: { tile: TileIndex; steps: number; gain: number; resurvey: boolean } | null
+  /** Explorers may resurvey stale land when nothing is left to discover (default on). */
+  resurvey?: boolean
 }
 
 export function getCampTile(state: WorldState): TileIndex | null {

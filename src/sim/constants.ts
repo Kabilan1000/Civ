@@ -2,7 +2,7 @@
 import type { Needs, Role, Stockpile, Terrain } from './types.ts'
 
 /** Bump whenever the serialized WorldState shape changes, and add a migration. */
-export const SCHEMA_VERSION = 8
+export const SCHEMA_VERSION = 9
 
 // ── Time ────────────────────────────────────────────────────────────────────
 
@@ -403,6 +403,24 @@ export const MEMORY_MERGE_TICKS = 240
 export const MEMORY_RELEVANCE_TICKS = 480
 /** Citizens within this distance witness a death. */
 export const WITNESS_RADIUS = 6
+
+// ── Returning fog and resurveying (schema v9) ───────────────────────────────
+// Discovery is permanent (map.discovered: terrain, connectivity, paths). What
+// fades is *freshness*: map.lastSeen records when each tile was last observed.
+/** Tiles observed within this many days are clear; fog then fades in until FOG_FULL_DAYS. */
+export const FOG_CLEAR_DAYS = 12
+export const FOG_FULL_DAYS = 24
+/** Citizens observe their surroundings every this many ticks (10 times a day). */
+export const OBSERVE_INTERVAL = 24
+/** Ordinary sight: Euclidean radius around every living citizen. */
+export const CITIZEN_SIGHT_RADIUS = 2
+/** The inhabited settlement stays in view: around the campfire and every occupied shelter. */
+export const CAMP_SIGHT_RADIUS = 3
+export const SHELTER_SIGHT_RADIUS = 2
+/** A resurvey target must refresh at least this many fading or stale tiles. */
+export const RESURVEY_MIN_GAIN = 8
+/** Resurveying is less urgent than exploring the unknown: its score is scaled by this. */
+export const RESURVEY_WEIGHT = 0.8
 
 // ── Exploration (M6) ────────────────────────────────────────────────────────
 

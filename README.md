@@ -90,6 +90,18 @@ pushes foragers further out, and the land recovers once the pressure moves
 on. The **Plants** card counts bushes, trees and sprouts. The land keeps
 changing in the fog, whether anyone watches or not.
 
+## Returning fog
+
+The village never forgets the island's shape — paths, homes and known
+plants stay usable — but what it *knows* fades. Land nobody has seen for 12
+days grows hazy, and after 24 days the fog returns: the map shows it as it
+was last seen, while plants keep growing and dying underneath. Villagers
+keep the ground around them and the settlement in view; explorers, once
+nothing new is left to find, go and resurvey the stalest land. On the map:
+clear = in view, a faint veil = seen recently, haze = fading or stale, dark
+= never discovered. The **Explored** card shows how much known land is fresh
+and how much has gone stale.
+
 ## Generations
 
 The village is no longer fixed at twelve. Ages are counted in world years

@@ -125,7 +125,7 @@ function Overview({ detail: d, onSelect }: { detail: CitizenDetail; onSelect: (i
         <dd>
           {!d.alive ? '—' : t ? (
             <>
-              {ACTION_LABELS[t.kind]} <span className="muted">({PHASE_LABELS[t.phase] ?? t.phase})</span>
+              {t.resurvey ? 'Resurvey stale land' : ACTION_LABELS[t.kind]} <span className="muted">({PHASE_LABELS[t.phase] ?? t.phase})</span>
               {t.targetCitizen && (
                 <>
                   {' '}with <CitizenLink id={t.targetCitizen.id} name={t.targetCitizen.name} onSelect={onSelect} />

@@ -36,6 +36,7 @@ import {
 import { remember } from '../citizens/memory.ts'
 import { pushEvent } from '../events.ts'
 import { revealAround } from '../map/discovery.ts'
+import { observeAround } from '../map/visibility.ts'
 import { getCampTile } from '../ai/context.ts'
 import { enterArrivalPhase } from '../ai/phases.ts'
 import { manhattan, toPoint } from '../grid.ts'
@@ -189,6 +190,7 @@ function survey(state: WorldState, c: Citizen): void {
   if (--task.ticksLeft > 0) return
   const here = c.pos.y * state.map.width + c.pos.x
   const revealed = revealAround(state.map, here, EXPLORE_REVEAL_RADIUS)
+  observeAround(state.map, here, EXPLORE_REVEAL_RADIUS, state.tick) // a survey refreshes what it sees (schema v9)
   if (revealed > 0) {
     remember(state, c, 'discovered', Math.min(0.7, 0.2 + revealed / 40), { tile: here })
     if (revealed >= DISCOVERY_EVENT_MIN_TILES) pushEvent(state, 'discovered', [c.id], { tiles: revealed, tile: here })

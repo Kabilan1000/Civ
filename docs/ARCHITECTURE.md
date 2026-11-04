@@ -160,6 +160,28 @@ positions above as their milestones land.
 - `SimRules.population` (default on) exists so tests can prove that,
   without the population rules, behaviour still matches v0.1 exactly.
 
+### 3.4c Returning fog (schema v9, `map/visibility.ts`, `systems/observation.ts`)
+
+- `map.discovered` is permanent (paths, building, gathering and the
+  frontier cache rely on it; discovery only ever grows). `map.lastSeen[i]`
+  is the tick a tile was last observed (−1 never). Freshness 0–6 is derived:
+  observed (< 1 day), recent (< 12 days), fading (12–24, three steps), stale
+  (≥ 24), unknown.
+- Observation (after act, every 24 ticks): radius 2 around every living
+  citizen; radius 3 around the campfire while anyone lives; radius 2 around
+  occupied shelters. Surveys refresh their reveal radius. Observation never
+  discovers land or bumps `map.version`.
+- Explorers: frontiers first, but only if they reveal ≥ 8 tiles (coastal
+  frontiers keep a few unknown water tiles in range forever); otherwise the
+  reachable tile whose survey would refresh the most faded tiles, spaced
+  from other explorers' targets, at 0.8× the explore score. Stale gains are
+  a derived cache keyed on the observation interval, discovered count and a
+  lastSeen checksum. `SimRules.resurvey` lets parity tests switch it off.
+- Renderer: fog alpha by freshness, baked into the map texture; re-checked
+  at most every 3 s real time and re-baked only when a level changes (a
+  separate fog layer was measured slower on software GPUs). Under stale fog
+  plant sprites show their last-seen look (renderer memory, not sim state).
+
 ### 3.5 Map
 
 - 36 × 24 tiles, stored as a flat array indexed `y * width + x`.

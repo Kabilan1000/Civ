@@ -2,6 +2,8 @@
 import { FRIENDSHIP_AFFINITY, MAX_EVENTS, RIVALRY_AFFINITY, SHELTER_CAPACITY, type DayPhase } from './constants.ts'
 import { stepCost, toPoint } from './grid.ts'
 import { ageYears, lifeStage, type LifeStage } from './citizens/life.ts'
+import { FRESHNESS_STALE, freshnessOf } from './map/visibility.ts'
+import { revealGain } from './ai/actions/explore.ts'
 import { dayNumberAt, dayPhaseAt, minuteOfDayAt, tickOfDayAt } from './systems/time.ts'
 import type {
   ActionKind,
@@ -74,6 +76,9 @@ export interface CivStats {
   totalTiles: number
   /** Discovered share of the map, 0..100 (one decimal). */
   exploredPercent: number
+  /** Share of discovered land seen within FOG_CLEAR_DAYS (0..100, whole), and stale (fog returned). */
+  freshPercent: number
+  stalePercent: number
   /** Mean needs of the living (0 when nobody is alive). */
   avgNeeds: Needs
   /** Unordered pairs of living citizens where BOTH affinities ≥ FRIENDSHIP_AFFINITY. */
@@ -126,6 +131,7 @@ export function getCivStats(state: WorldState): CivStats {
     discoveredTiles,
     totalTiles,
     exploredPercent: totalTiles === 0 ? 0 : Math.round((discoveredTiles / totalTiles) * 1000) / 10,
+    ...freshness(state, discoveredTiles),
     avgNeeds: { satiety: avg('satiety'), energy: avg('energy'), social: avg('social'), health: avg('health') },
     friendships,
     rivalries,
@@ -138,6 +144,19 @@ export function getCivStats(state: WorldState): CivStats {
     },
     plants: plantCensus(state),
   }
+}
+
+function freshness(state: WorldState, discovered: number): { freshPercent: number; stalePercent: number } {
+  if (discovered === 0) return { freshPercent: 0, stalePercent: 0 }
+  let fresh = 0
+  let stale = 0
+  const { map, tick } = state
+  for (let i = 0; i < map.discovered.length; i++) {
+    const f = freshnessOf(map.discovered[i]!, map.lastSeen[i]!, tick)
+    if (f <= 1) fresh++
+    else if (f === FRESHNESS_STALE) stale++
+  }
+  return { freshPercent: Math.round((fresh / discovered) * 100), stalePercent: Math.round((stale / discovered) * 100) }
 }
 
 /** Plants by kind and stage, plus cumulative plant births and deaths (M10c). */
@@ -189,6 +208,8 @@ export interface CitizenTaskView {
   targetCitizen: { id: number; name: string } | null
   targetStructure: { id: number; kind: string; stage: string } | null
   startedTick: number
+  /** An explore task aimed at known, faded land (schema v9). */
+  resurvey: boolean
 }
 
 export interface CitizenDetail {
@@ -234,6 +255,8 @@ export function getCitizenDetail(state: WorldState, id: number): CitizenDetail |
       targetCitizen: targetCitizen && t.targetId !== null ? { id: t.targetId, name: name(t.targetId) } : null,
       targetStructure: structure ? { id: structure.id, kind: structure.kind, stage: structure.stage } : null,
       startedTick: t.startedTick,
+      // An explorer heading for known land (nothing left to discover there) is resurveying it.
+      resurvey: t.kind === 'explore' && t.targetTile !== null && revealGain(state.map, t.targetTile) === 0,
     }
   }
   return {

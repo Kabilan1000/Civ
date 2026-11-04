@@ -196,6 +196,11 @@ describe('serialize / deserialize', () => {
     ['ecology counter', (r: any) => (r.ecology.counters.deaths.wood = -1), /ecology\.counters\.deaths\.wood/],
     ['event id beyond nextEventId', (r: any) => (r.nextEventId = r.events.at(-1).id), /events\[\d+\]\.id/],
     ['duplicate event id', (r: any) => (r.events[1] = { ...r.events[1], id: r.events[0].id }), /unique event id/],
+    // Schema v9: freshness.
+    ['lastSeen length', (r: any) => r.map.lastSeen.pop(), /map\.lastSeen/],
+    ['lastSeen in the future', (r: any) => (r.map.lastSeen[r.map.discovered.indexOf(1)] = r.tick + 1), /map\.lastSeen/],
+    ['seen but undiscovered', (r: any) => (r.map.lastSeen[r.map.discovered.indexOf(0)] = 0), /map\.lastSeen/],
+    ['discovered but never seen', (r: any) => (r.map.lastSeen[r.map.discovered.indexOf(1)] = -1), /map\.lastSeen/],
   ])('rejects corrupt %s', (_name, mutate, message) => {
     expectSaveError(() => deserialize(corrupt(mutate)), 'invalid-data', message)
   })

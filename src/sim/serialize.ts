@@ -164,6 +164,15 @@ const migrations: Record<number, Migration> = {
     assignMigratedAges(migrated, seed, tick, 'v8:', (n) => n.stage === 'mature')
     return { ...data, map: migrated }
   },
+  // v8 → v9 (returning fog): a per-tile lastSeen tick. Discovery is kept as
+  // it was (permanent); every discovered tile counts as seen at the save's
+  // tick, so the fog returns gradually from then on rather than all at once.
+  8: (data) => {
+    const tick = data.tick as number
+    const map = data.map as Record<string, unknown>
+    const lastSeen = (map.discovered as number[]).map((d) => (d === 1 ? tick : -1))
+    return { ...data, map: { ...map, lastSeen } }
+  },
 }
 
 export function serialize(state: WorldState): string {
@@ -306,7 +315,12 @@ function validateWorld(d: Record<string, unknown>): asserts d is Record<string, 
       return node
     }),
   )
-  sized(map.discovered, 'map.discovered').forEach((v, i) => int(v, `map.discovered[${i}]`, 0, 1))
+  const discovered = sized(map.discovered, 'map.discovered')
+  discovered.forEach((v, i) => int(v, `map.discovered[${i}]`, 0, 1))
+  sized(map.lastSeen, 'map.lastSeen').forEach((v, i) => {
+    const seen = int(v, `map.lastSeen[${i}]`, -1, d.tick as number)
+    if ((discovered[i] === 1) !== (seen >= 0)) fail(`map.lastSeen[${i}]`, 'a tick for discovered tiles and −1 for undiscovered ones')
+  })
   int(map.version, 'map.version', 0)
 
   const tile = (v: unknown, p: string) => int(v, p, 0, size - 1)

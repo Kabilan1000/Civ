@@ -24,6 +24,7 @@ export function sandbox(
   map.discovered = map.discovered.map((_d, i) =>
     !opts.discovered || opts.discovered(i % map.width, Math.floor(i / map.width)) ? 1 : 0,
   )
+  map.lastSeen = map.discovered.map((d) => (d === 1 ? 0 : -1))
   state.map = map
   state.config = { ...state.config, width: map.width, height: map.height }
   state.structures[0]!.tile = toIndex(opts.camp[0], opts.camp[1], map.width)

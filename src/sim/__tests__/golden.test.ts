@@ -33,7 +33,7 @@ describe('D6 seed stability: tick-0 terrain and resources unchanged since v0.1',
 // including M10b's plant lifecycle (senescence off) and the v7 save shape —
 // must still behave exactly like the pre-M10b simulation.
 // Plant senescence and reproduction (M10c) also change behaviour on purpose and are switched off here.
-const NO_POPULATION = { ...DEFAULT_SIM_RULES, ecology: { senescence: false, reproduction: false }, population: false }
+const NO_POPULATION = { ...DEFAULT_SIM_RULES, ecology: { senescence: false, reproduction: false }, population: false, resurvey: false }
 const stepNWith = (s: Parameters<typeof stepWithRules>[0], n: number) => {
   for (let i = 0; i < n; i++) stepWithRules(s, NO_POPULATION)
 }

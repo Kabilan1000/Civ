@@ -85,7 +85,7 @@ describe('v5 → v6 migration of a real v0.1 save', () => {
     const got: { tick: number; behaviour: string }[] = []
     for (const c of expected.continuation) {
       while (s.tick < c.tick) {
-        stepWithRules(s, { ...DEFAULT_SIM_RULES, ecology: { senescence: false, reproduction: false }, population: false })
+        stepWithRules(s, { ...DEFAULT_SIM_RULES, ecology: { senescence: false, reproduction: false }, population: false, resurvey: false })
         expect(conservationTotals(s)).toEqual(start)
       }
       got.push({ tick: s.tick, behaviour: behaviourHash(s) })
