@@ -89,7 +89,12 @@ describe('generations (long-term history, schema v11)', () => {
         food: last.food,
         births: s.population.counters.births,
         deaths: s.population.counters.deaths,
+        // v13: the same dawn's ecology census.
+        bearing: s.ecoHistory.at(-1)!.bearing,
+        nearBushes: s.ecoHistory.at(-1)!.nearBushes,
+        held: s.activity.birthsHeldByLand,
       })
+      expect(s.ecoHistory.at(-1)!.tick).toBe(s.tick)
       expect(g.children + g.adults + g.elders).toBe(g.population)
     }
   })

@@ -288,6 +288,21 @@ describe('carrying capacity (births need bearing bushes per person)', () => {
     expect(childrenOf(enough.state).length).toBeGreaterThan(0)
   })
 
+  it('tallies couple-days held back by the land alone (observability, schema v13)', () => {
+    const held = onLand(2) // a fertile, housed couple with food: the land is the only obstacle, every dawn
+    dawns(held.state, 300)
+    expect(held.state.activity.birthsHeldByLand).toBe(300)
+    const homeless = onLand(2) // no home either: not held by the land alone
+    homeless.state.structures = homeless.state.structures.filter((x) => x.kind !== 'shelter')
+    homeless.a.homeId = null
+    homeless.b.homeId = null
+    dawns(homeless.state, 50)
+    expect(homeless.state.activity.birthsHeldByLand).toBe(0)
+    const classicFamily = family() // no bush check at all
+    dawns(classicFamily.state, 50)
+    expect(classicFamily.state.activity.birthsHeldByLand).toBe(0)
+  })
+
   it('the classic profile has no such check (older worlds keep their rules); new worlds have it', () => {
     expect(CLASSIC_PROFILE.birthBushesPerPersonPermille).toBe(0)
     expect(FAST_PROFILE.birthBushesPerPersonPermille).toBeGreaterThan(0)

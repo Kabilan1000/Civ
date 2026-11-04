@@ -25,6 +25,8 @@ const fingerprint = (json: string) => {
   delete w.schemaVersion
   delete w.generations
   delete w.population.profile.birthBushesPerPersonPermille
+  delete w.ecoHistory // v13 observability record (added after these saves' code)
+  delete w.activity
   return createHash('sha256').update(canon(w)).digest('hex')
 }
 

@@ -55,7 +55,13 @@ function scoreGather(ctx: DecisionContext, kind: ResourceKind): number {
 function startGather(ctx: DecisionContext, kind: ResourceKind): boolean {
   const target = kind === 'berries' ? ctx.berries : ctx.wood
   if (!target) return false
-  return beginTask(ctx.state, ctx.citizen, kind === 'berries' ? 'forage' : 'chop', target.tile)
+  const started = beginTask(ctx.state, ctx.citizen, kind === 'berries' ? 'forage' : 'chop', target.tile)
+  if (started && kind === 'berries') {
+    // Observability tally only (schema v13): never read by any decision.
+    ctx.state.activity.forageTrips++
+    ctx.state.activity.forageSteps += target.steps
+  }
+  return started
 }
 
 export const scoreForage = (ctx: DecisionContext) => scoreGather(ctx, 'berries')

@@ -4,7 +4,8 @@
 // at HISTORY_MAX samples; the oldest are dropped. Nothing is ever back-filled
 // or interpolated — a migrated save starts with an empty history.
 
-import { GENERATIONS_MAX, HISTORY_INTERVAL, HISTORY_MAX, SHELTER_CAPACITY, TICKS_PER_SEASON } from '../constants.ts'
+import { ECO_HISTORY_MAX, GENERATIONS_MAX, HISTORY_INTERVAL, HISTORY_MAX, SHELTER_CAPACITY, TICKS_PER_DAY, TICKS_PER_SEASON } from '../constants.ts'
+import { ecoCensus } from '../ecology/census.ts'
 import { isSeasonStart } from '../calendar.ts'
 import { countStages } from '../selectors.ts'
 import type { HistorySample, WorldState } from '../types.ts'
@@ -40,7 +41,14 @@ export function recordSample(state: WorldState): void {
 
 export function recordHistory(state: WorldState): void {
   if (state.tick % HISTORY_INTERVAL === 0) recordSample(state)
+  if (state.tick % TICKS_PER_DAY === 0) recordEcoSample(state)
   if (isSeasonStart(state.tick)) recordGeneration(state)
+}
+
+/** Daily ecology census (schema v13), at each dawn after every system has run. Bounded at ECO_HISTORY_MAX. */
+export function recordEcoSample(state: WorldState): void {
+  state.ecoHistory.push(ecoCensus(state))
+  if (state.ecoHistory.length > ECO_HISTORY_MAX) state.ecoHistory.splice(0, state.ecoHistory.length - ECO_HISTORY_MAX)
 }
 
 /**
@@ -52,6 +60,7 @@ export function recordGeneration(state: WorldState): void {
   const since = state.tick - TICKS_PER_SEASON
   const season = state.history.filter((h) => h.tick > since && h.tick <= state.tick).map((h) => h.population)
   const now = state.history.at(-1)!
+  const eco = state.ecoHistory.at(-1)! // season starts are dawns: taken this same tick
   state.generations.push({
     tick: state.tick,
     population: now.population,
@@ -65,6 +74,9 @@ export function recordGeneration(state: WorldState): void {
     food: now.food,
     births: state.population.counters.births,
     deaths: state.population.counters.deaths,
+    bearing: eco.bearing,
+    nearBushes: eco.nearBushes,
+    held: eco.held,
   })
   if (state.generations.length > GENERATIONS_MAX) state.generations.splice(0, state.generations.length - GENERATIONS_MAX)
 }

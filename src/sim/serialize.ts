@@ -9,6 +9,7 @@ import {
   MAX_OVERCROWD,
   TICKS_PER_DAY,
   TICKS_PER_YEAR,
+  ECO_HISTORY_MAX,
   GENERATIONS_MAX,
   HISTORY_MAX,
   MAX_EVENTS,
@@ -198,6 +199,14 @@ const migrations: Record<number, Migration> = {
   // was simulated without that check, so it keeps living without it (0 = no
   // check): its demographics are never changed by loading it. Everything
   // else is untouched.
+  // v12 → v13 (observability): an empty daily ecology record and zeroed
+  // activity tallies. Nothing is reconstructed for the past — the dashboard
+  // fills from the next dawn — and nothing that drives the simulation changes.
+  12: (data) => ({
+    ...data,
+    ecoHistory: [],
+    activity: { forageTrips: 0, forageSteps: 0, resurveys: 0, birthsHeldByLand: 0 },
+  }),
   11: (data) => {
     const population = data.population as Record<string, unknown>
     const profile = population.profile as Record<string, unknown>
@@ -571,7 +580,33 @@ function validateWorld(d: Record<string, unknown>): asserts d is Record<string, 
     lastGen = t
     for (const k of ['population', 'children', 'adults', 'elders', 'peak', 'low', 'housed', 'capacity', 'food', 'births', 'deaths']) int(g[k], `${p}.${k}`, 0)
     if ((g.low as number) > (g.peak as number)) fail(`${p}.low`, 'at most the peak')
+    for (const k of ['bearing', 'nearBushes', 'held']) if (g[k] !== undefined) int(g[k], `${p}.${k}`, 0) // v13 fields
   })
+
+  // Daily ecology record and activity tallies (v13)
+  const eco = arr(d.ecoHistory, 'ecoHistory')
+  if (eco.length > ECO_HISTORY_MAX) fail('ecoHistory', `at most ${ECO_HISTORY_MAX} samples`)
+  let lastEco = -1
+  eco.forEach((raw, i) => {
+    const p = `ecoHistory[${i}]`
+    const e = obj(raw, p)
+    const t = int(e.tick, `${p}.tick`, 0, d.tick as number)
+    if (t <= lastEco) fail(`${p}.tick`, 'strictly increasing ticks')
+    lastEco = t
+    for (const kind of ['bushes', 'trees']) {
+      const sc = obj(e[kind], `${p}.${kind}`)
+      for (const k of ['seedling', 'young', 'mature', 'old']) int(sc[k], `${p}.${kind}.${k}`, 0)
+    }
+    for (const kind of ['plantBirths', 'plantDeaths']) {
+      const pk = obj(e[kind], `${p}.${kind}`)
+      for (const k of ['berries', 'wood']) int(pk[k], `${p}.${kind}.${k}`, 0)
+    }
+    for (const k of ['deadwood', 'deadwoodWood', 'berries', 'bearing', 'nearBushes', 'nearBerries', 'nearCapacity', 'population', 'recent', 'fading', 'stale', 'gathered', 'regrown', 'decayed', 'forageTrips', 'forageSteps', 'resurveys', 'held'])
+      int(e[k], `${p}.${k}`, 0)
+    if ((e.nearBerries as number) > (e.nearCapacity as number)) fail(`${p}.nearBerries`, 'at most nearCapacity')
+  })
+  const activity = obj(d.activity, 'activity')
+  for (const k of ['forageTrips', 'forageSteps', 'resurveys', 'birthsHeldByLand']) int(activity[k], `activity.${k}`, 0)
 
   // Events
   const events = arr(d.events, 'events')

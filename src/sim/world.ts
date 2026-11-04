@@ -8,7 +8,7 @@ import { generateMap } from './map/generate.ts'
 import { seedRng } from './rng.ts'
 import { updateConstruction } from './systems/construction.ts'
 import { decide } from './systems/decide.ts'
-import { recordHistory, recordSample } from './systems/history.ts'
+import { recordEcoSample, recordHistory, recordSample } from './systems/history.ts'
 import { updateNeeds } from './systems/needs.ts'
 import { assignInitialAges } from './ecology/flora.ts'
 import { DEFAULT_ECOLOGY_RULES, updateEcology, type EcologyRules } from './systems/ecology.ts'
@@ -72,6 +72,8 @@ export function createWorld(overrides: Partial<WorldConfig> = {}): WorldState {
     },
     history: [],
     generations: [],
+    ecoHistory: [],
+    activity: { forageTrips: 0, forageSteps: 0, resurveys: 0, birthsHeldByLand: 0 },
     events: [],
     ecology: {
       rng: seedRng(`${config.seed}#ecology`),
@@ -89,6 +91,7 @@ export function createWorld(overrides: Partial<WorldConfig> = {}): WorldState {
   state.citizens = createCitizens(state, campTile)
   assignFounderAges(state.citizens, config.seed, state.population.profile) // own derived stream
   recordSample(state) // tick 0
+  recordEcoSample(state) // tick 0 is a dawn
   pushEvent(state, 'worldCreated', state.citizens.map((c) => c.id), {
     seed: config.seed,
     mapAttempt: attempt,

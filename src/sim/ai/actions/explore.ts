@@ -169,5 +169,7 @@ export function scoreExplore(ctx: DecisionContext): number {
 
 export function startExplore(ctx: DecisionContext): boolean {
   const frontier = bestFrontier(ctx)
-  return frontier !== null && beginTask(ctx.state, ctx.citizen, 'explore', frontier.tile)
+  const started = frontier !== null && beginTask(ctx.state, ctx.citizen, 'explore', frontier.tile)
+  if (started && frontier.resurvey) ctx.state.activity.resurveys++ // observability tally only (schema v13)
+  return started
 }

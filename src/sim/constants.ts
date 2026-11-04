@@ -2,7 +2,7 @@
 import type { Needs, Role, Stockpile, Terrain } from './types.ts'
 
 /** Bump whenever the serialized WorldState shape changes, and add a migration. */
-export const SCHEMA_VERSION = 12
+export const SCHEMA_VERSION = 13
 
 // ── Time ────────────────────────────────────────────────────────────────────
 
@@ -105,6 +105,10 @@ export const HISTORY_MAX = 600
  * this many — 100 world years. Bounded at about 70 KB of save.
  */
 export const GENERATIONS_MAX = 400
+/** Daily ecology censuses kept (schema v13): 60 days, like the recent history. */
+export const ECO_HISTORY_MAX = 60
+/** "Near the campfire" for the ecology dashboard: within this many tiles (4-neighbour distance). */
+export const NEAR_CAMP_TILES = 8
 
 export interface TerrainRule {
   passable: boolean

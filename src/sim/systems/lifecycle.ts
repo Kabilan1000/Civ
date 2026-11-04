@@ -178,7 +178,11 @@ function births(state: WorldState): void {
     if (state.stockpile.food < BIRTH_FOOD_PER_CAPITA * living) continue
     if (p.birthBushesPerPersonPermille > 0) {
       if (bushes < 0) bushes = bearingBushes(state)
-      if (bushes * 1000 < p.birthBushesPerPersonPermille * (living + 1)) continue
+      if (bushes * 1000 < p.birthBushesPerPersonPermille * (living + 1)) {
+        // Observability tally only (schema v13): held back by the land alone. No randomness drawn.
+        if (birthHome(state, a, b)) state.activity.birthsHeldByLand++
+        continue
+      }
     }
     const home = birthHome(state, a, b)
     if (!home) continue

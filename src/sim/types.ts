@@ -376,6 +376,78 @@ export interface GenerationSample {
   /** Cumulative births and deaths (population counters) — per-season figures are the differences. */
   births: number
   deaths: number
+  /** Schema v13 (absent from older summaries): bearing berry bushes on known land at season end, those near the campfire, and the cumulative births-held-by-land tally. */
+  bearing?: number
+  nearBushes?: number
+  held?: number
+}
+
+/** Living plants of one kind by growth stage. */
+export interface StageCounts {
+  seedling: number
+  young: number
+  mature: number
+  old: number
+}
+
+/**
+ * Cumulative activity tallies (schema v13), written where the activity
+ * happens and read only by selectors — they never influence a decision.
+ * Counted since world creation, or since the save was upgraded to v13.
+ */
+export interface ActivityCounters {
+  /** Forage trips begun, and the walking steps to their bushes (average distance = steps / trips). */
+  forageTrips: number
+  forageSteps: number
+  /** Explorer trips begun to resurvey faded land (rather than to discover new land). */
+  resurveys: number
+  /**
+   * Couple-days on which a couple met every condition for a child — partner,
+   * fertile ages, spacing, village food, a home with room — except the
+   * profile's bearing-bushes-per-person check (births then still needed the
+   * daily chance). Always 0 for worlds without that check.
+   */
+  birthsHeldByLand: number
+}
+
+/**
+ * Daily ecology record (schema v13): a census taken at each dawn after every
+ * system has run. Cumulative fields copy the live counters, so per-day
+ * figures are differences between consecutive samples.
+ */
+export interface EcoSample {
+  tick: number
+  /** Living berry bushes and trees on the whole island, by stage. */
+  bushes: StageCounts
+  trees: StageCounts
+  /** Dead trees still standing, and the wood they hold. */
+  deadwood: number
+  deadwoodWood: number
+  /** Berries on living bushes (whole island). */
+  berries: number
+  /** Bearing berry bushes (young, mature, old) on known land — the carrying-capacity count. */
+  bearing: number
+  /** Bearing bushes on known land within NEAR_CAMP_TILES of the campfire, the berries on them and their capacity. */
+  nearBushes: number
+  nearBerries: number
+  nearCapacity: number
+  population: number
+  /** Known land by freshness: seen within FOG_CLEAR_DAYS, fading, or stale (fog returned). */
+  recent: number
+  fading: number
+  stale: number
+  /** Cumulative: plant births and deaths by kind (ecology counters). */
+  plantBirths: { berries: number; wood: number }
+  plantDeaths: { berries: number; wood: number }
+  /** Cumulative food flows (ledger): picked by foragers, regrown on bushes, lost with dying bushes. */
+  gathered: number
+  regrown: number
+  decayed: number
+  /** Cumulative activity tallies (ActivityCounters). */
+  forageTrips: number
+  forageSteps: number
+  resurveys: number
+  held: number
 }
 
 export interface WorldConfig {
@@ -405,6 +477,10 @@ export interface WorldState {
   history: HistorySample[]
   /** One summary per season, oldest first; at most GENERATIONS_MAX (≈100 world years). */
   generations: GenerationSample[]
+  /** One ecology census per dawn, oldest first; at most ECO_HISTORY_MAX (schema v13). */
+  ecoHistory: EcoSample[]
+  /** Observability tallies (schema v13). */
+  activity: ActivityCounters
   /** Oldest first; capped at MAX_EVENTS. */
   events: SimEvent[]
   ecology: EcologyState
