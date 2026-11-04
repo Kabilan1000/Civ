@@ -144,8 +144,10 @@ lives in, from a census taken every dawn (kept for 60 days):
 - **Last 5 days vs the 5 before:** people (with births and deaths), food
   per person, whether forage near the campfire is improving, getting worse,
   mixed or steady (berries on nearby bushes, nearby bushes, steps per
-  forage trip), and — in new worlds — how often births were held back
-  because the land had too few fruiting bushes per person. These show what
+  forage trip), and — in new worlds — **birth opportunities blocked by
+  land**: couple-days on which a couple met every other condition for a
+  child, but the land had too few fruiting bushes per person, so that day's
+  chance of a birth never came. These show what
   changed together; they don't claim one change caused another.
 - **Now:** berry bushes and trees by growth stage, deadwood, berries near
   the campfire, the average forage trip, how much known land is seen

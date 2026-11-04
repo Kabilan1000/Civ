@@ -115,7 +115,9 @@ export const LandPanel = memo(function LandPanel({ controller, historyTick, worl
           </li>
           {landRule && (
             <li>
-              <span className="trend-label">Births held by land</span>
+              <span className="trend-label" title="Couple-days on which a couple met every other condition for a child (partner, fertile ages, spacing, village food, a home with room) but the land had too few bearing berry bushes per person, so that day's chance of a birth never came.">
+                Birth opportunities blocked by land
+              </span>
               {held === null ? (
                 <span className="muted">counting from the next dawn</span>
               ) : (
@@ -206,7 +208,7 @@ function EcoCharts({ days, landRule }: { days: EcoDay[]; landRule: boolean }) {
         series={[
           { label: 'People', color: S1, values: days.map((d) => d.population) },
           { label: 'Bearing bushes', color: S3, values: days.map((d) => d.bearing) },
-          ...(landRule ? [{ label: 'Births held', color: S2, values: days.map((d) => d.heldToday) }] : []),
+          ...(landRule ? [{ label: 'Birth opportunities blocked by land', color: S2, values: days.map((d) => d.heldToday) }] : []),
         ]}
       />
       <LineChart

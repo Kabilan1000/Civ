@@ -228,7 +228,7 @@ function GenerationsView({ state, version }: { state: WorldState; version: numbe
               { label: 'Bearing bushes', color: S3, values: rows.map((r) => r.bearing ?? null) },
               { label: 'Near camp', color: S4, values: rows.map((r) => r.nearBushes ?? null) },
               ...(state.population.profile.birthBushesPerPersonPermille > 0
-                ? [{ label: 'Births held', color: S2, values: rows.map((r) => r.seasonHeld) }]
+                ? [{ label: 'Birth opportunities blocked by land', color: S2, values: rows.map((r) => r.seasonHeld) }]
                 : []),
             ]}
           />
