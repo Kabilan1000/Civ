@@ -40,7 +40,8 @@ const age = (c: (typeof living)[number]) => Math.floor((s.tick - c.bornTick) / (
 console.log(
   JSON.stringify({
     seed, day: Number(dayArg), tick: s.tick, living: living.length,
-    children: living.filter((c) => age(c) < 14).length, elders: living.filter((c) => age(c) >= 50).length,
+    profile: s.population.profile.id,
+    children: living.filter((c) => age(c) < s.population.profile.adultAge).length, elders: living.filter((c) => age(c) >= s.population.profile.elderAge).length,
     couples: living.filter((c) => c.partnerId !== null && c.partnerId > c.id).length,
     founders: living.filter((c) => c.parentIds === null).length,
     dead: s.citizens.filter((c) => !c.alive).length, archived: s.archive.length,
