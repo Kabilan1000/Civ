@@ -23,8 +23,9 @@ import { housingDeficit } from '../structures.ts'
 import type { Citizen, Structure, WorldState } from '../types.ts'
 import { createWorld, step, stepN } from '../world.ts'
 import { createCitizen } from '../citizens/create.ts'
+import { plantNode } from '../ecology/flora.ts'
 import { assignHomes, planShelter } from './construction.ts'
-import { updateLifeCycle } from './lifecycle.ts'
+import { bearingBushes, updateLifeCycle } from './lifecycle.ts'
 
 const dawn = (day: number) => (day - 1) * TICKS_PER_DAY
 
@@ -254,6 +255,45 @@ describe('births', () => {
     expect(state.citizens.filter((c) => c.alive)).toHaveLength(MAX_POPULATION)
     dawns(state, 300)
     expect(childrenOf(state)).toHaveLength(0)
+  })
+})
+
+describe('carrying capacity (births need bearing bushes per person)', () => {
+  /** A family whose profile requires 1 bearing bush per person (newborn included), with `bushes` on the map. */
+  function onLand(bushes: number, discovered = true) {
+    const f = family()
+    f.state.population.profile.birthBushesPerPersonPermille = 1000
+    for (let i = 0; i < bushes; i++) {
+      const tile = 1 + i // top row, away from the shelter
+      f.state.map.resources[tile] = plantNode('berries')
+      f.state.map.discovered[tile] = discovered ? 1 : 0
+    }
+    return f
+  }
+
+  it('counts only bearing bushes on known land', () => {
+    const f = onLand(3)
+    expect(bearingBushes(f.state)).toBe(3)
+    f.state.map.resources[1]!.stage = 'seedling'
+    expect(bearingBushes(f.state)).toBe(2)
+    expect(bearingBushes(onLand(3, false).state)).toBe(0)
+  })
+
+  it('no births while the land feeds fewer than everyone plus the newborn; births once it does', () => {
+    const short = onLand(2) // 2 people + newborn need 3
+    dawns(short.state, 300)
+    expect(childrenOf(short.state)).toHaveLength(0)
+    const enough = onLand(3)
+    dawns(enough.state, 300)
+    expect(childrenOf(enough.state).length).toBeGreaterThan(0)
+  })
+
+  it('the classic profile has no such check (older worlds keep their rules); new worlds have it', () => {
+    expect(CLASSIC_PROFILE.birthBushesPerPersonPermille).toBe(0)
+    expect(FAST_PROFILE.birthBushesPerPersonPermille).toBeGreaterThan(0)
+    const f = family() // classic, no bushes at all
+    dawns(f.state, 300)
+    expect(childrenOf(f.state).length).toBeGreaterThan(0)
   })
 })
 
