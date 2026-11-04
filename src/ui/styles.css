@@ -223,6 +223,31 @@ button { font: inherit; color: inherit; }
 .events li.season-sep::before, .events li.season-sep::after { content: ''; flex: 1; height: 1px; background: var(--border-strong); }
 .feed-note { margin-top: 8px; }
 
+/* Land & ecology (M10d) */
+.land { grid-column: 1 / -1; }
+.land .stat-sub { white-space: normal; }
+.trends { background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; margin-bottom: 12px; }
+.trends h3 { margin: 0 0 6px; }
+.trends ul { list-style: none; margin: 0 0 6px; padding: 0; display: grid; gap: 4px; font-size: 0.84rem; }
+.trends li { display: grid; grid-template-columns: 9.5rem 1fr; gap: 8px; align-items: baseline; }
+.trend-label { color: var(--muted); }
+.dir { font-weight: 600; }
+.dir-improving { color: var(--good); }
+.dir-deteriorating { color: var(--critical); }
+.dir-mixed { color: var(--warning); }
+.dir-steady, .dir-unknown { color: var(--text-2); font-weight: 500; }
+.landbar { display: flex; height: 8px; border-radius: 4px; overflow: hidden; margin: -4px 0 4px; background: #2c3641; }
+.landbar span { min-width: 0; }
+.lb-recent { background: var(--series-3); }
+.lb-fading { background: var(--series-4); }
+.lb-stale { background: var(--series-2); }
+.lb-unknown { background: #2c3641; }
+.landbar-legend .swatch { height: 8px; width: 8px; }
+.landbar-legend { margin-bottom: 12px; }
+@media (width <= 720px) {
+  .trends li { grid-template-columns: 1fr; gap: 0; }
+}
+
 /* History charts */
 .charts { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
 .chart { margin: 0; min-width: 0; }

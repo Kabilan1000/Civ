@@ -219,6 +219,20 @@ function GenerationsView({ state, version }: { state: WorldState; version: numbe
           ]}
         />
         <LineChart title="Food at season's end" {...common} series={[{ label: 'Food', color: S1, values: rows.map((r) => r.food) }]} />
+        {rows.some((r) => r.bearing !== undefined) && (
+          <LineChart
+            title="People and land by season"
+            {...common}
+            series={[
+              { label: 'Living', color: S1, values: rows.map((r) => r.population) },
+              { label: 'Bearing bushes', color: S3, values: rows.map((r) => r.bearing ?? null) },
+              { label: 'Near camp', color: S4, values: rows.map((r) => r.nearBushes ?? null) },
+              ...(state.population.profile.birthBushesPerPersonPermille > 0
+                ? [{ label: 'Births held', color: S2, values: rows.map((r) => r.seasonHeld) }]
+                : []),
+            ]}
+          />
+        )}
       </div>
       <p className="muted small">
         {rows.length} seasons ({(rows.length / 4).toFixed(1)} world years) from {generationLabel(first)}, one real summary per season; the last {GENERATIONS_MAX} (

@@ -6,6 +6,7 @@ import { Controls } from './components/Controls.tsx'
 import { Dashboard } from './components/Dashboard.tsx'
 import { EventFeed } from './components/EventFeed.tsx'
 import { HistoryCharts } from './components/HistoryCharts.tsx'
+import { LandPanel } from './components/LandPanel.tsx'
 import { Inspector } from './components/Inspector.tsx'
 import { MapView } from './components/MapView.tsx'
 import { ConfirmDialog, type ConfirmRequest } from './components/Modal.tsx'
@@ -111,6 +112,7 @@ export default function App() {
           <div className="below-map">
             <EventFeed controller={controller} lastEventId={snapshot.lastEventId} worldId={snapshot.worldId} onSelect={select} />
             <HistoryCharts controller={controller} historyTick={snapshot.historyTick} worldId={snapshot.worldId} />
+            <LandPanel controller={controller} historyTick={snapshot.historyTick} worldId={snapshot.worldId} />
           </div>
         </div>
         <aside className="sidebar">
