@@ -419,6 +419,7 @@ export const EVENT_CATEGORIES: Readonly<Record<SimEventKind, EventCategory>> = {
   born: 'family',
   cameOfAge: 'family',
   partnered: 'family',
+  roleChanged: 'family',
 }
 
 /**

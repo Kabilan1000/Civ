@@ -259,6 +259,7 @@ export type SimEventKind =
   | 'born'
   | 'cameOfAge'
   | 'partnered'
+  | 'roleChanged'
 
 export interface SimEvent {
   id: number

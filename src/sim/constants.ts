@@ -388,8 +388,11 @@ export const CHILD_SATIETY_FACTOR = 0.6
 export const CHILD_ROAM_RADIUS = 4
 /** A child's traits are the parents' average ± up to this much (then rounded). */
 export const CHILD_TRAIT_VARIATION = 0.1
-/** Explorers are not assigned to newborns beyond this many. */
+/** At most this many ADULT explorers (children and elders don't count; citizens/workforce.ts). */
 export const MAX_EXPLORERS = 2
+/** A replacement explorer may only be taken from a role that keeps these: food gathering first. */
+export const MIN_FORAGER_SHARE_PERMILLE = 250
+export const MIN_BUILDERS = 2
 /** The dead move to the compact archive this many days after death. */
 export const ARCHIVE_AFTER_DAYS = 48
 export const ARCHIVE_MAX = 400

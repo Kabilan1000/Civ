@@ -24,12 +24,10 @@ import {
   ELDER_AGE,
   FERTILE_AGE,
   INITIAL_NEEDS,
-  MAX_EXPLORERS,
   MAX_OVERCROWD,
   MAX_POPULATION,
   PARTNER_AFFINITY,
   PARTNER_FAMILIARITY,
-  ROLES,
   SHELTER_CAPACITY,
   TICKS_PER_DAY,
   TRAIT_PRECISION,
@@ -37,11 +35,12 @@ import {
 import { createCitizen } from '../citizens/create.ts'
 import { ageYears, areKin, isBirthday, oldAgeHazardPermille } from '../citizens/life.ts'
 import { remember } from '../citizens/memory.ts'
+import { chooseReplacementExplorer, provisionalRole, roleAtAdulthood } from '../citizens/workforce.ts'
 import { CITIZEN_NAMES, NEWBORN_NAMES } from '../citizens/names.ts'
 import { pushEvent } from '../events.ts'
 import { allocateId } from '../ids.ts'
 import { nextInt } from '../rng.ts'
-import type { Citizen, Personality, Role, WorldState } from '../types.ts'
+import type { Citizen, Personality, WorldState } from '../types.ts'
 import { assignHomes } from './construction.ts'
 import { killCitizen } from './death.ts'
 import { tickOfDayAt } from './time.ts'
@@ -49,6 +48,7 @@ import { tickOfDayAt } from './time.ts'
 export function updateLifeCycle(state: WorldState): void {
   if (state.tick === 0 || tickOfDayAt(state.tick) !== 0) return
   birthdays(state)
+  staffExplorers(state)
   formPartnerships(state)
   births(state)
   assignHomes(state)
@@ -63,7 +63,8 @@ function birthdays(state: WorldState): void {
     const age = ageYears(c, state.tick)
     if (age === ADULT_AGE) {
       state.population.counters.comingOfAge++
-      pushEvent(state, 'cameOfAge', [c.id], { age })
+      c.role = roleAtAdulthood(state, c) // from the adult workforce they join
+      pushEvent(state, 'cameOfAge', [c.id], { age, role: c.role })
       c.nextDecisionTick = state.tick // decide now with the full action set
     } else if (age === ELDER_AGE) {
       c.nextDecisionTick = state.tick // elders stop exploring
@@ -74,6 +75,18 @@ function birthdays(state: WorldState): void {
       killCitizen(state, c, 'oldAge')
     }
   }
+}
+
+// ── 1b. Explorer staffing ────────────────────────────────────────────────────
+
+/** A village with no adult explorer gets one from its workforce (see citizens/workforce.ts). */
+function staffExplorers(state: WorldState): void {
+  const c = chooseReplacementExplorer(state)
+  if (!c) return
+  const from = c.role
+  c.role = 'explorer'
+  c.nextDecisionTick = state.tick
+  pushEvent(state, 'roleChanged', [c.id], { from, role: 'explorer' })
 }
 
 // ── 2. Partnerships ──────────────────────────────────────────────────────────
@@ -162,17 +175,9 @@ function inheritedTrait(state: WorldState, x: number, y: number): number {
   return Math.round(Math.min(1, Math.max(0, v)) * TRAIT_PRECISION) / TRAIT_PRECISION
 }
 
-/** The role a newborn will take up as an adult: the least represented, explorers capped. */
-function newbornRole(state: WorldState): Role {
-  const count: Record<Role, number> = { forager: 0, builder: 0, explorer: 0 }
-  for (const c of state.citizens) if (c.alive) count[c.role]++
-  const options = ROLES.filter((r) => r !== 'explorer' || count.explorer < MAX_EXPLORERS)
-  return options.reduce((best, r) => (count[r] < count[best] ? r : best), options[0]!)
-}
-
 function bear(state: WorldState, housedParent: Citizen, other: Citizen, homeId: number): void {
   const name = newbornName(state)
-  const role = newbornRole(state)
+  const role = provisionalRole(state) // provisional: chosen for real at coming of age
   const p = housedParent.personality
   const q = other.personality
   const personality: Personality = {

@@ -268,7 +268,7 @@ const MEMORY_KINDS = [
 ] as const
 const EVENT_KINDS = [
   'worldCreated', 'dayStarted', 'shelterStarted', 'shelterCompleted', 'shelterAbandoned', 'movedIn', 'chat', 'argument',
-  'sharedFood', 'discovered', 'starving', 'died', 'friendship', 'rivalry', 'born', 'cameOfAge', 'partnered',
+  'sharedFood', 'discovered', 'starving', 'died', 'friendship', 'rivalry', 'born', 'cameOfAge', 'partnered', 'roleChanged',
 ] as const
 
 function validateWorld(d: Record<string, unknown>): asserts d is Record<string, unknown> & WorldState {

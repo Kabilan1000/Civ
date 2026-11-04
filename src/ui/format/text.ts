@@ -125,9 +125,11 @@ export function describeEvent(e: SimEvent, nameOf: (id: number) => string): Segm
     case 'born':
       return [who(0), ' was born to ', who(1), ' and ', who(2), '.']
     case 'cameOfAge':
-      return [who(0), ` came of age (${String(d.age ?? '')}) and joined the workforce.`]
+      return [who(0), ` came of age (${String(d.age ?? '')}) and became a ${String(d.role ?? 'worker')}.`]
     case 'partnered':
       return [who(0), ' and ', who(1), ' became partners.']
+    case 'roleChanged':
+      return [who(0), ` took up exploring: the village had no explorer.`]
   }
 }
 
