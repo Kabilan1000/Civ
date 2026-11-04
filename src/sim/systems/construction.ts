@@ -148,7 +148,7 @@ export function assignHomes(state: WorldState): void {
 
   // 3. Children live with a housed parent.
   for (const c of ordered) {
-    if (!isChild(c, state.tick) || !c.parentIds) continue
+    if (!isChild(state, c) || !c.parentIds) continue
     const parent = c.parentIds.map((id) => living.get(id)).find((p) => p && p.homeId !== null)
     const home = parent && homeOf(parent)
     if (home && c.homeId !== home.id && home.residentIds.length < SHELTER_CAPACITY + MAX_OVERCROWD) move(c, home)
@@ -160,7 +160,7 @@ export function assignHomes(state: WorldState): void {
     const here = new Set(s.residentIds)
     const lodgers = s.residentIds
       .map((id) => living.get(id)!)
-      .filter((c) => !isChild(c, state.tick) && !(c.partnerId !== null && here.has(c.partnerId)) && !c.childIds.some((k) => here.has(k)))
+      .filter((c) => !isChild(state, c) && !(c.partnerId !== null && here.has(c.partnerId)) && !c.childIds.some((k) => here.has(k)))
     for (const lodger of lodgers) {
       if (s.residentIds.length <= SHELTER_CAPACITY) break
       const target = shelters.find((t) => t !== s && free(t) >= 1)

@@ -26,7 +26,7 @@ export function takeSample(state: WorldState): HistorySample {
     energy: avg('energy'),
     health: avg('health'),
     social: avg('social'),
-    ...countStages(living, state.tick),
+    ...countStages(state, living),
     births: state.population.counters.births,
     deaths: state.population.counters.deaths,
   }

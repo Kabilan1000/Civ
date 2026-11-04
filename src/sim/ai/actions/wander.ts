@@ -22,7 +22,7 @@ export function startWander(ctx: DecisionContext): boolean {
   const { state, citizen: c, steps } = ctx
   const { map, rng } = state
   // Children play near home: around the campfire, within CHILD_ROAM_RADIUS.
-  const child = isChild(c, state.tick) && ctx.campTile !== null
+  const child = isChild(state, c) && ctx.campTile !== null
   const origin = child ? toPoint(ctx.campTile!, map.width) : c.pos
   const radius = child ? CHILD_ROAM_RADIUS : WANDER_RADIUS
   for (let attempt = 0; attempt < WANDER_MAX_TRIES; attempt++) {

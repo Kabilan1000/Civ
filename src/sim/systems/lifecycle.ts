@@ -1,7 +1,7 @@
 // Life cycle (Population V1, docs/design/LIVING_WORLD_TDS.md §8). Runs at
 // dawn only, after ecology and before construction:
 //
-//   1. birthdays — coming of age at ADULT_AGE; from ELDER_AGE an old-age roll
+//   1. birthdays — coming of age at the profile's adult age; from its elder age an old-age roll
 //      (certain at MAX_AGE) → killCitizen(…, 'oldAge')
 //   2. partnerships — adults with mutual affinity and familiarity, not kin
 //   3. births — per couple, only when every explicit condition holds
@@ -13,16 +13,11 @@
 // births follow the same rules whatever the colony's state (no rescue births).
 
 import {
-  ADULT_AGE,
   ARCHIVE_AFTER_DAYS,
   ARCHIVE_MAX,
-  BIRTH_CHANCE_PERMILLE,
   BIRTH_FOOD_PER_CAPITA,
-  BIRTH_SPACING_DAYS,
   CHILD_TRAIT_VARIATION,
   DECISION_INTERVAL,
-  ELDER_AGE,
-  FERTILE_AGE,
   INITIAL_NEEDS,
   MAX_OVERCROWD,
   MAX_POPULATION,
@@ -40,7 +35,7 @@ import { CITIZEN_NAMES, NEWBORN_NAMES } from '../citizens/names.ts'
 import { pushEvent } from '../events.ts'
 import { allocateId } from '../ids.ts'
 import { nextInt } from '../rng.ts'
-import type { Citizen, Personality, WorldState } from '../types.ts'
+import type { Citizen, DemographicProfile, Personality, WorldState } from '../types.ts'
 import { assignHomes } from './construction.ts'
 import { killCitizen } from './death.ts'
 import { tickOfDayAt } from './time.ts'
@@ -61,15 +56,15 @@ function birthdays(state: WorldState): void {
   for (const c of [...state.citizens]) {
     if (!c.alive || !isBirthday(c, state.tick)) continue
     const age = ageYears(c, state.tick)
-    if (age === ADULT_AGE) {
+    if (age === state.population.profile.adultAge) {
       state.population.counters.comingOfAge++
       c.role = roleAtAdulthood(state, c) // from the adult workforce they join
       pushEvent(state, 'cameOfAge', [c.id], { age, role: c.role })
       c.nextDecisionTick = state.tick // decide now with the full action set
-    } else if (age === ELDER_AGE) {
+    } else if (age === state.population.profile.elderAge) {
       c.nextDecisionTick = state.tick // elders stop exploring
     }
-    const hazard = oldAgeHazardPermille(age)
+    const hazard = oldAgeHazardPermille(age, state.population.profile)
     if (hazard > 0 && nextInt(state.population.rng, 0, 999) < hazard) {
       state.population.counters.oldAgeDeaths++
       killCitizen(state, c, 'oldAge')
@@ -92,7 +87,7 @@ function staffExplorers(state: WorldState): void {
 // ── 2. Partnerships ──────────────────────────────────────────────────────────
 
 function formPartnerships(state: WorldState): void {
-  const single = state.citizens.filter((c) => c.alive && c.partnerId === null && ageYears(c, state.tick) >= ADULT_AGE)
+  const single = state.citizens.filter((c) => c.alive && c.partnerId === null && ageYears(c, state.tick) >= state.population.profile.adultAge)
   const pairs: { a: Citizen; b: Citizen; affinity: number }[] = []
   for (let i = 0; i < single.length; i++) {
     for (let j = i + 1; j < single.length; j++) {
@@ -121,11 +116,12 @@ function formPartnerships(state: WorldState): void {
 
 // ── 3. Births ────────────────────────────────────────────────────────────────
 
-const fertile = (c: Citizen, tick: number) => {
+const fertile = (c: Citizen, tick: number, p: DemographicProfile) => {
   const age = ageYears(c, tick)
-  return age >= FERTILE_AGE.min && age <= FERTILE_AGE.max
+  return age >= p.fertileAge.min && age <= p.fertileAge.max
 }
-const rested = (c: Citizen, tick: number) => c.lastChildTick === null || tick - c.lastChildTick >= BIRTH_SPACING_DAYS * TICKS_PER_DAY
+const rested = (c: Citizen, tick: number, p: DemographicProfile) =>
+  c.lastChildTick === null || tick - c.lastChildTick >= p.birthSpacingDays * TICKS_PER_DAY
 
 /**
  * The home a couple's child would live in: the housed partner's home (the
@@ -149,11 +145,12 @@ function births(state: WorldState): void {
     if (!a.alive || !b || !b.alive || b.id < a.id) continue // each couple once, from its lower id
     const living = state.citizens.filter((c) => c.alive).length
     if (living >= MAX_POPULATION) return
-    if (!fertile(a, tick) || !fertile(b, tick) || !rested(a, tick) || !rested(b, tick)) continue
+    const p = state.population.profile
+    if (!fertile(a, tick, p) || !fertile(b, tick, p) || !rested(a, tick, p) || !rested(b, tick, p)) continue
     if (state.stockpile.food < BIRTH_FOOD_PER_CAPITA * living) continue
     const home = birthHome(state, a, b)
     if (!home) continue
-    if (nextInt(state.population.rng, 0, 999) >= BIRTH_CHANCE_PERMILLE) continue
+    if (nextInt(state.population.rng, 0, 999) >= p.birthChancePermille) continue
     bear(state, home.parent, home.parent === a ? b : a, home.homeId)
   }
 }

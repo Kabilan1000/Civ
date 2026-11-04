@@ -1,9 +1,9 @@
-import { DAYS_PER_YEAR, DECISION_INTERVAL, FOUNDER_AGE, INITIAL_NEEDS, ROLES, TICKS_PER_DAY, TRAIT_PRECISION } from '../constants.ts'
+import { DAYS_PER_YEAR, DECISION_INTERVAL, INITIAL_NEEDS, ROLES, TICKS_PER_DAY, TRAIT_PRECISION } from '../constants.ts'
 import { toPoint } from '../grid.ts'
 import { allocateId } from '../ids.ts'
 import { spawnCandidates, startRegion } from '../map/generate.ts'
 import { nextFloat, nextInt, seedRng, shuffle } from '../rng.ts'
-import type { Citizen, Personality, Point, Role, RngState, TileIndex, WorldState } from '../types.ts'
+import type { Citizen, DemographicProfile, Personality, Point, Role, RngState, TileIndex, WorldState } from '../types.ts'
 import { CITIZEN_NAMES } from './names.ts'
 
 function trait(rng: RngState): number {
@@ -78,10 +78,10 @@ export function createCitizen(
  * roles, spawn tiles and personalities are exactly as in v0.1. bornTick is a
  * dawn tick, so birthdays fall at dawn.
  */
-export function assignFounderAges(citizens: Citizen[], seed: string): void {
+export function assignFounderAges(citizens: Citizen[], seed: string, profile: DemographicProfile): void {
   const rng = seedRng(`${seed}#founders`)
   for (const c of citizens) {
-    const years = nextInt(rng, FOUNDER_AGE.min, FOUNDER_AGE.max)
+    const years = nextInt(rng, profile.founderAge.min, profile.founderAge.max)
     const dayOfYear = nextInt(rng, 0, DAYS_PER_YEAR - 1)
     c.bornTick = -(years * DAYS_PER_YEAR + dayOfYear) * TICKS_PER_DAY
   }

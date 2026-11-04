@@ -22,7 +22,7 @@ const round = (x: number) => Math.round(x * 1000) / 1000
 
 /** All actions, best first (ties keep ACTIONS order). Impossible actions score 0 and get no jitter. */
 export function scoreActions(ctx: DecisionContext): ActionScore[] {
-  const stage = lifeStage(ctx.citizen, ctx.state.tick)
+  const stage = lifeStage(ctx.state, ctx.citizen)
   const scored = ACTIONS.map((a, order) => {
     // Life stage limits what a citizen may do (Population V1). The jitter is
     // drawn for every action regardless, so the RNG draw count never changes.

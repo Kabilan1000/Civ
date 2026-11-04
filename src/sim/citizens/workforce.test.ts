@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { conservationTotals } from '../__tests__/invariants.ts'
 import { revealGain } from '../ai/actions/explore.ts'
-import { FOG_FULL_DAYS, MAX_EXPLORERS, MIN_BUILDERS, TICKS_PER_DAY, TICKS_PER_YEAR } from '../constants.ts'
+import { CLASSIC_PROFILE, FOG_FULL_DAYS, MAX_EXPLORERS, MIN_BUILDERS, TICKS_PER_DAY, TICKS_PER_YEAR } from '../constants.ts'
 import { deserialize, serialize } from '../serialize.ts'
 import { updateLifeCycle } from '../systems/lifecycle.ts'
 import type { Citizen, Role, WorldState } from '../types.ts'
@@ -22,7 +22,7 @@ describe('the reported 60-citizen village with no adult explorer', () => {
     const s = village60()
     expect(s.citizens.filter((c) => c.alive)).toHaveLength(60)
     expect(adultRoles(s).explorer).toBe(0)
-    expect(s.citizens.filter((c) => c.alive && c.role === 'explorer' && lifeStage(c, s.tick) === 'child')).toHaveLength(2)
+    expect(s.citizens.filter((c) => c.alive && c.role === 'explorer' && lifeStage(s, c) === 'child')).toHaveLength(2)
   })
 
   it('gains a working explorer at the next dawn, resumes surveying, and refreshes the stale land', () => {
@@ -38,7 +38,7 @@ describe('the reported 60-citizen village with no adult explorer', () => {
     expect(ev).toHaveLength(1)
     const explorer = s.citizens.find((c) => c.id === ev[0]!.citizenIds[0])!
     expect(explorer.role).toBe('explorer')
-    expect(lifeStage(explorer, s.tick)).toBe('adult')
+    expect(lifeStage(s, explorer)).toBe('adult')
     // The most curious of those who could be spared, food and building staffed.
     const after = adultRoles(s)
     expect(after.forager).toBeGreaterThanOrEqual(minForagers(after.forager + after.builder + after.explorer))
@@ -53,7 +53,7 @@ describe('the reported 60-citizen village with no adult explorer', () => {
     expect(resurveys).toBeGreaterThan(5)
     expect(staleShare(s)).toBeLessThan(stale0 - 0.3) // progressively refreshed
     // Only that one switch happened; nobody else changed profession.
-    const switched = s.citizens.filter((c) => before.has(c.id) && before.get(c.id) !== c.role && c.id !== explorer.id && lifeStage(c, s.tick) !== 'adult')
+    const switched = s.citizens.filter((c) => before.has(c.id) && before.get(c.id) !== c.role && c.id !== explorer.id && lifeStage(s, c) !== 'adult')
     expect(switched.filter((c) => s.events.some((e) => e.kind === 'roleChanged' && e.citizenIds[0] === c.id))).toHaveLength(0)
     expect(s.events.filter((e) => e.kind === 'roleChanged')).toHaveLength(1)
   })
@@ -63,6 +63,7 @@ describe('explorer staffing rules', () => {
   /** A world of `n` adult citizens with given roles (ages adult). */
   function workforce(roles: Role[], curiosity: number[] = []): WorldState {
     const s = createWorld({ seed: 'workforce', citizenCount: roles.length })
+    s.population.profile = { ...CLASSIC_PROFILE, founderAge: { ...CLASSIC_PROFILE.founderAge }, fertileAge: { ...CLASSIC_PROFILE.fertileAge } } // ages below are classic
     s.tick = 30 * DAY
     s.citizens.forEach((c, i) => {
       c.role = roles[i]!
@@ -136,7 +137,7 @@ describe('a self-renewing workforce over generations (no rapid switching)', () =
           if (prev !== undefined && prev !== c.role) changes.set(c.id, (changes.get(c.id) ?? 0) + 1)
           seen.set(c.id, c.role)
         }
-        const adults = s.citizens.filter((c) => c.alive && lifeStage(c, s.tick) === 'adult').length
+        const adults = s.citizens.filter((c) => c.alive && lifeStage(s, c) === 'adult').length
         if (adults >= 5 && adultRoles(s).explorer === 0) daysWithout++
         else daysWithout = 0
         longestWithout = Math.max(longestWithout, daysWithout)

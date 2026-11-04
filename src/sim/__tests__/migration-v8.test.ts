@@ -59,9 +59,13 @@ for (const [label, file] of FIXTURES) {
     })
 
     it('leaves citizens, families, buildings, ledger, events, history, archive and population untouched', () => {
-      for (const k of ['citizens', 'structures', 'stockpile', 'ledger', 'events', 'history', 'archive', 'population', 'ecology', 'rng', 'nextId', 'nextEventId'] as const) {
+      for (const k of ['citizens', 'structures', 'stockpile', 'ledger', 'events', 'history', 'archive', 'ecology', 'rng', 'nextId', 'nextEventId'] as const) {
         expect(w[k as keyof WorldState], k).toEqual(v7[k])
       }
+      // Population is untouched apart from the profile the v9 → v10 step adds: the classic rules it lived by.
+      const { profile, ...population } = w.population
+      expect(population).toEqual(v7.population)
+      expect(profile.id).toBe('classic-v1')
       expect(w.map.terrain).toEqual(v7.map.terrain)
       expect(w.map.discovered).toEqual(v7.map.discovered)
     })

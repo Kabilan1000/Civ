@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { ageYears } from '../citizens/life.ts'
-import { FOUNDER_AGE, SCHEMA_VERSION, TICKS_PER_DAY } from '../constants.ts'
+import { CLASSIC_PROFILE, SCHEMA_VERSION, TICKS_PER_DAY } from '../constants.ts'
 import { deserialize, serialize } from '../serialize.ts'
 import { step } from '../world.ts'
 import { conservationTotals } from './invariants.ts'
@@ -23,8 +23,8 @@ describe('v6 → v7 migration of a real M10b save', () => {
     expect(w.schemaVersion).toBe(SCHEMA_VERSION)
     for (const c of w.citizens) {
       const age = ageYears(c, w.tick)
-      expect(age).toBeGreaterThanOrEqual(FOUNDER_AGE.min)
-      expect(age).toBeLessThanOrEqual(FOUNDER_AGE.max)
+      expect(age).toBeGreaterThanOrEqual(CLASSIC_PROFILE.founderAge.min)
+      expect(age).toBeLessThanOrEqual(CLASSIC_PROFILE.founderAge.max)
       expect(Math.abs(c.bornTick % TICKS_PER_DAY)).toBe(0)
       expect([c.parentIds, c.partnerId, c.childIds, c.lastChildTick]).toEqual([null, null, [], null])
     }

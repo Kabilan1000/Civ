@@ -5,8 +5,7 @@
 import {
   ARCHIVE_MAX,
   DAYS_PER_YEAR,
-  FOUNDER_AGE,
-  MAX_AGE,
+  CLASSIC_PROFILE,
   MAX_OVERCROWD,
   TICKS_PER_DAY,
   TICKS_PER_YEAR,
@@ -112,7 +111,7 @@ const migrations: Record<number, Migration> = {
     }
   },
   // v6 → v7 (Population V1): every existing citizen is a founder-like adult
-  // aged FOUNDER_AGE (birthday spread over the year), derived from a hash of
+  // aged CLASSIC_PROFILE.founderAge — the rules those worlds live by — (birthday spread over the year), derived from a hash of
   // seed and id — no RNG state — with bornTick on a dawn. No families yet:
   // parents, partner and children start empty. An empty archive and a
   // population stream (seed#population@tick) with zero counters.
@@ -122,7 +121,7 @@ const migrations: Record<number, Migration> = {
     const dayStart = tick - (tick % TICKS_PER_DAY)
     const citizens = (data.citizens as Record<string, unknown>[]).map((c) => {
       const h = fnv1a32(`${seed}:founder:${String(c.id)}`)
-      const years = FOUNDER_AGE.min + (h % (FOUNDER_AGE.max - FOUNDER_AGE.min + 1))
+      const years = CLASSIC_PROFILE.founderAge.min + (h % (CLASSIC_PROFILE.founderAge.max - CLASSIC_PROFILE.founderAge.min + 1))
       const dayOfYear = (h >>> 8) % DAYS_PER_YEAR
       return {
         ...c,
@@ -173,6 +172,17 @@ const migrations: Record<number, Migration> = {
     const lastSeen = (map.discovered as number[]).map((d) => (d === 1 ? tick : -1))
     return { ...data, map: { ...map, lastSeen } }
   },
+  // v9 → v10 (demographic profiles): a world keeps the rules it was simulated
+  // under. Every existing save lived by the classic profile, so it gets that
+  // one — ages, families and histories are untouched; only new worlds use the
+  // accelerated profile.
+  9: (data) => ({
+    ...data,
+    population: {
+      ...(data.population as Record<string, unknown>),
+      profile: { ...CLASSIC_PROFILE, founderAge: { ...CLASSIC_PROFILE.founderAge }, fertileAge: { ...CLASSIC_PROFILE.fertileAge } },
+    },
+  }),
 }
 
 export function serialize(state: WorldState): string {
@@ -284,6 +294,20 @@ function validateWorld(d: Record<string, unknown>): asserts d is Record<string, 
   rng.forEach((w, i) => int(w, `rng[${i}]`, 0, 0xffff_ffff))
   const nextId = int(d.nextId, 'nextId', 1)
   const nextEventId = int(d.nextEventId, 'nextEventId', 1)
+
+  // Demographic profile (v10) first: citizen ages are checked against it.
+  const prof = obj(obj(d.population, 'population').profile, 'population.profile')
+  str(prof.id, 'population.profile.id')
+  const adultAge = int(prof.adultAge, 'population.profile.adultAge', 1, 200)
+  const elderAge = int(prof.elderAge, 'population.profile.elderAge', adultAge + 1, 200)
+  int(prof.maxAge, 'population.profile.maxAge', elderAge + 1, 200)
+  for (const k of ['founderAge', 'fertileAge']) {
+    const r = obj(prof[k], `population.profile.${k}`)
+    const lo = int(r.min, `population.profile.${k}.min`, 0, 200)
+    int(r.max, `population.profile.${k}.max`, lo, 200)
+  }
+  int(prof.birthChancePermille, 'population.profile.birthChancePermille', 0, 1000)
+  int(prof.birthSpacingDays, 'population.profile.birthSpacingDays', 1, 10000)
 
   // Map
   const map = obj(d.map, 'map')
@@ -415,7 +439,8 @@ function validateWorld(d: Record<string, unknown>): asserts d is Record<string, 
     if (alive !== (diedTick === null) || alive !== (cause === null)) fail(`${p}`, 'alive, diedTick and deathCause to agree')
     // Population V1
     const born = int(c.bornTick, `${p}.bornTick`, -Infinity, d.tick as number)
-    if (alive && Math.floor(((d.tick as number) - born) / TICKS_PER_YEAR) > MAX_AGE) fail(`${p}.bornTick`, `a living age of at most ${MAX_AGE}`)
+    const maxAge = (d.population as { profile: { maxAge: number } }).profile.maxAge
+    if (alive && Math.floor(((d.tick as number) - born) / TICKS_PER_YEAR) > maxAge) fail(`${p}.bornTick`, `a living age of at most ${maxAge}`)
     nullable(c.parentIds, `${p}.parentIds`, (v, pp) => {
       const ps = arr(v, pp)
       if (ps.length !== 2) fail(pp, 'two parent ids')

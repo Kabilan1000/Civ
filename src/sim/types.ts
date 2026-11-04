@@ -200,8 +200,22 @@ export interface PersonRecord {
   childIds: number[]
 }
 
+/** Life-stage ages and birth rules a world was created with (schema v10; see constants.ts). */
+export interface DemographicProfile {
+  id: string
+  adultAge: number
+  elderAge: number
+  maxAge: number
+  founderAge: { min: number; max: number }
+  fertileAge: { min: number; max: number }
+  birthChancePermille: number
+  birthSpacingDays: number
+}
+
 /** Population bookkeeping (Population V1). People themselves are in `citizens` and `archive`. */
 export interface PopulationState {
+  /** This world's demographic rules — kept for its whole life, so tuning never rewrites a world. */
+  profile: DemographicProfile
   /** Dedicated stream for births, newborns' names/traits/roles and old-age rolls. */
   rng: RngState
   /** Cumulative since world creation (or migration to schema v7). */

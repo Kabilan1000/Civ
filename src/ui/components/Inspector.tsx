@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import type { SimulationController, SimulationSnapshot } from '../../app/SimulationController.ts'
 import {
-  ADULT_AGE,
   explainDecision,
   getPersonName,
   getCitizenDetail,
@@ -167,7 +166,7 @@ function Overview({ detail: d, onSelect }: { detail: CitizenDetail; onSelect: (i
       <dl className="facts">
         <dt>Age</dt>
         <dd>
-          {d.age} <span className="muted small">({STAGE_LABEL[d.stage].toLowerCase()}{d.stage === 'child' ? `; will work as a ${ROLE_LABEL[d.role].toLowerCase()} from ${ADULT_AGE}` : ''})</span>
+          {d.age} <span className="muted small">({STAGE_LABEL[d.stage].toLowerCase()}{d.stage === 'child' ? `; likely to work as a ${ROLE_LABEL[d.role].toLowerCase()} from ${d.adultAge}` : ''})</span>
         </dd>
         <dt>Born</dt>
         <dd>{d.founder ? <span className="muted">a founder of the village</span> : <span title={formatCalendarTick(d.bornTick)}>{formatTick(d.bornTick)}</span>}</dd>

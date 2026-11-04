@@ -14,7 +14,7 @@ import { MAX_EXPLORERS, MIN_BUILDERS, MIN_FORAGER_SHARE_PERMILLE } from '../cons
 import type { Citizen, Role, WorldState } from '../types.ts'
 import { lifeStage } from './life.ts'
 
-const adults = (state: WorldState) => state.citizens.filter((c) => c.alive && lifeStage(c, state.tick) === 'adult')
+const adults = (state: WorldState) => state.citizens.filter((c) => c.alive && lifeStage(state, c) === 'adult')
 
 /** Living adults by role (children and elders excluded). */
 export function adultRoles(state: WorldState, except?: Citizen): Record<Role, number> {

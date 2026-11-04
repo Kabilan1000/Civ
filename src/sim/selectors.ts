@@ -86,7 +86,7 @@ export interface CivStats {
   /** Unordered pairs of living citizens where EITHER affinity ≤ RIVALRY_AFFINITY. */
   rivalries: number
   /** Population V1: living citizens by life stage, couples, and cumulative births and deaths. */
-  people: { children: number; adults: number; elders: number; couples: number; births: number; deaths: number; oldAgeDeaths: number }
+  people: { children: number; adults: number; elders: number; couples: number; births: number; deaths: number; oldAgeDeaths: number; adultAge: number; elderAge: number }
   /** M10c: plants on the whole island (the land changes under the fog too). */
   plants: { bushes: number; trees: number; seedlings: number; deadwood: number; births: number; deaths: number }
 }
@@ -136,11 +136,13 @@ export function getCivStats(state: WorldState): CivStats {
     friendships,
     rivalries,
     people: {
-      ...countStages(living, state.tick),
+      ...countStages(state, living),
       couples: living.filter((c) => c.partnerId !== null && c.partnerId > c.id).length,
       births: state.population.counters.births,
       deaths: state.population.counters.deaths,
       oldAgeDeaths: state.population.counters.oldAgeDeaths,
+      adultAge: state.population.profile.adultAge,
+      elderAge: state.population.profile.elderAge,
     },
     plants: plantCensus(state),
   }
@@ -176,10 +178,10 @@ export function plantCensus(state: WorldState): CivStats['plants'] {
 }
 
 /** Living citizens by life stage. */
-export function countStages(living: readonly Citizen[], tick: number): { children: number; adults: number; elders: number } {
+export function countStages(state: Pick<WorldState, 'tick' | 'population'>, living: readonly Citizen[]): { children: number; adults: number; elders: number } {
   const out = { children: 0, adults: 0, elders: 0 }
   for (const c of living) {
-    const stage = lifeStage(c, tick)
+    const stage = lifeStage(state, c)
     if (stage === 'child') out.children++
     else if (stage === 'adult') out.adults++
     else out.elders++
@@ -230,6 +232,8 @@ export interface CitizenDetail {
   /** Population V1 */
   age: number
   stage: LifeStage
+  /** This world's age of adulthood (its demographic profile). */
+  adultAge: number
   bornTick: number
   founder: boolean
   parents: { id: number; name: string; listed: boolean }[]
@@ -281,7 +285,8 @@ export function getCitizenDetail(state: WorldState, id: number): CitizenDetail |
     scores: c.lastScores.map((s) => ({ ...s })),
     lastDecisionTick: c.lastDecisionTick,
     age: ageYears(c, state.tick),
-    stage: lifeStage(c, state.tick),
+    stage: lifeStage(state, c),
+    adultAge: state.population.profile.adultAge,
     bornTick: c.bornTick,
     founder: c.parentIds === null,
     parents: (c.parentIds ?? []).map(person),

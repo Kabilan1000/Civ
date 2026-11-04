@@ -1,5 +1,5 @@
 import type { SimulationSnapshot } from '../../app/SimulationController.ts'
-import { ADULT_AGE, ELDER_AGE, FOG_CLEAR_DAYS, FOG_FULL_DAYS, MAX_POPULATION } from '../../sim/index.ts'
+import { FOG_CLEAR_DAYS, FOG_FULL_DAYS, MAX_POPULATION } from '../../sim/index.ts'
 import { calendarHint, formatDate } from '../format/calendar.ts'
 import { Meter } from './Meter.tsx'
 
@@ -53,7 +53,7 @@ export function Dashboard({ snapshot }: { snapshot: SimulationSnapshot }) {
           label="Ages"
           value={`${s.people.children} · ${s.people.adults} · ${s.people.elders}`}
           sub="children · adults · elders"
-          hint={`Children are under ${ADULT_AGE}, elders ${ELDER_AGE} or older (in world years of 48 days).`}
+          hint={`Children are under ${s.people.adultAge}, elders ${s.people.elderAge} or older (in world years of 48 days).`}
         />
         <Stat
           label="Plants"

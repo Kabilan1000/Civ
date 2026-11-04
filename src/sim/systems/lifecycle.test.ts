@@ -4,12 +4,8 @@ import { sandbox } from '../__tests__/sandbox.ts'
 import { allowedFor } from '../ai/utility.ts'
 import { ageYears, areKin, isBirthday, lifeStageAt, oldAgeHazardPermille } from '../citizens/life.ts'
 import {
-  ADULT_AGE,
   ARCHIVE_AFTER_DAYS,
   BIRTH_FOOD_PER_CAPITA,
-  ELDER_AGE,
-  FOUNDER_AGE,
-  MAX_AGE,
   MAX_OVERCROWD,
   MAX_POPULATION,
   SHELTER_CAPACITY,
@@ -17,6 +13,8 @@ import {
   SHELTER_WORK_TICKS,
   TICKS_PER_DAY,
   TICKS_PER_YEAR,
+  CLASSIC_PROFILE,
+  FAST_PROFILE,
 } from '../constants.ts'
 import { allocateId } from '../ids.ts'
 import { getPersonName } from '../selectors.ts'
@@ -29,6 +27,14 @@ import { assignHomes, planShelter } from './construction.ts'
 import { updateLifeCycle } from './lifecycle.ts'
 
 const dawn = (day: number) => (day - 1) * TICKS_PER_DAY
+
+// The controlled scenarios below use the CLASSIC profile (the rules every save from before v10
+// lives by); fresh worlds use the accelerated one and read it from their own state.
+const P = CLASSIC_PROFILE
+const ADULT_AGE = P.adultAge
+const ELDER_AGE = P.elderAge
+const MAX_AGE = P.maxAge
+const classic = () => ({ ...CLASSIC_PROFILE, founderAge: { ...CLASSIC_PROFILE.founderAge }, fertileAge: { ...CLASSIC_PROFILE.fertileAge } })
 
 /** Make `c` exactly `age` years old at `tick`, with today `daysAgo` days after their birthday. */
 function setAge(c: Citizen, age: number, tick: number, daysAgo = 10): void {
@@ -67,6 +73,7 @@ function family(opts: { partnered?: boolean; food?: number; extra?: number } = {
     food: opts.food ?? 500,
   })
   state.tick = dawn(30)
+  state.population.profile = classic()
   const [a, b] = citizens as [Citizen, Citizen]
   for (const c of citizens) setAge(c, 25, state.tick)
   const home = shelter(state, 7 * 9 + 7)
@@ -91,8 +98,12 @@ const childrenOf = (s: WorldState) => s.citizens.filter((c) => c.parentIds !== n
 
 describe('ages and stages', () => {
   it('maps ages to life stages and rolls the old-age hazard with integers only', () => {
-    expect([0, 13, 14, 49, 50, 64].map(lifeStageAt)).toEqual(['child', 'child', 'adult', 'adult', 'elder', 'elder'])
-    expect([ELDER_AGE - 1, ELDER_AGE, 55, 60, MAX_AGE - 1, MAX_AGE].map(oldAgeHazardPermille)).toEqual([0, 3, 140, 472, 878, 1000])
+    expect([0, 13, 14, 49, 50, 64].map((a) => lifeStageAt(a, P))).toEqual(['child', 'child', 'adult', 'adult', 'elder', 'elder'])
+    expect([ELDER_AGE - 1, ELDER_AGE, 55, 60, MAX_AGE - 1, MAX_AGE].map((a) => oldAgeHazardPermille(a, P))).toEqual([0, 3, 140, 472, 878, 1000])
+    // Accelerated profile (new worlds): the same curve over a shorter old age, rising gradually.
+    const F = FAST_PROFILE
+    expect([0, 4, 5, 14, 15, 21].map((a) => lifeStageAt(a, F))).toEqual(['child', 'child', 'adult', 'adult', 'elder', 'elder'])
+    expect([14, 15, 16, 17, 18, 19, 20, 21, 22].map((a) => oldAgeHazardPermille(a, F))).toEqual([0, 15, 62, 140, 250, 390, 562, 765, 1000])
   })
 
   it('birthdays fall on the dawn that completes another 48-day year', () => {
@@ -108,8 +119,9 @@ describe('ages and stages', () => {
       const s = createWorld({ seed })
       for (const c of s.citizens) {
         const age = ageYears(c, 0)
-        expect(age).toBeGreaterThanOrEqual(FOUNDER_AGE.min)
-        expect(age).toBeLessThanOrEqual(FOUNDER_AGE.max)
+        expect(s.population.profile.id).toBe(FAST_PROFILE.id) // new worlds: accelerated profile
+        expect(age).toBeGreaterThanOrEqual(FAST_PROFILE.founderAge.min)
+        expect(age).toBeLessThanOrEqual(FAST_PROFILE.founderAge.max)
         expect(Math.abs(c.bornTick % TICKS_PER_DAY)).toBe(0)
         expect(c.parentIds).toBeNull()
       }
@@ -360,8 +372,9 @@ describe('whole-village determinism across births, birthdays and deaths', () => 
     stepN(s, 60 * TICKS_PER_DAY - 1) // just before the dawn of day 61
     // Stage the next days so they contain a death of old age and a coming of age.
     const [old, young] = s.citizens.filter((c) => c.alive)
-    old!.bornTick = s.tick + 1 + TICKS_PER_DAY - MAX_AGE * TICKS_PER_YEAR
-    young!.bornTick = s.tick + 1 + 2 * TICKS_PER_DAY - ADULT_AGE * TICKS_PER_YEAR // an adult founder made a teenager
+    const pr = s.population.profile
+    old!.bornTick = s.tick + 1 + TICKS_PER_DAY - pr.maxAge * TICKS_PER_YEAR
+    young!.bornTick = s.tick + 1 + 2 * TICKS_PER_DAY - pr.adultAge * TICKS_PER_YEAR // an adult made to come of age
     const resumed = deserialize(serialize(s))
     stepN(s, 30 * TICKS_PER_DAY)
     stepN(resumed, 30 * TICKS_PER_DAY)
@@ -381,9 +394,9 @@ describe('whole-village determinism across births, birthdays and deaths', () => 
       const living = s.citizens.filter((c) => c.alive)
       expect(living.length).toBeLessThanOrEqual(MAX_POPULATION)
       for (const c of living) {
-        expect(ageYears(c, s.tick)).toBeLessThanOrEqual(MAX_AGE)
+        expect(ageYears(c, s.tick)).toBeLessThanOrEqual(s.population.profile.maxAge)
         if (c.partnerId !== null) expect(s.citizens.find((o) => o.id === c.partnerId)?.partnerId).toBe(c.id)
-        if (ageYears(c, s.tick) < ADULT_AGE && c.task) expect(['eat', 'rest', 'socialize', 'wander']).toContain(c.task.kind)
+        if (ageYears(c, s.tick) < s.population.profile.adultAge && c.task) expect(['eat', 'rest', 'socialize', 'wander']).toContain(c.task.kind)
       }
       for (const sh of s.structures) expect(sh.residentIds.length).toBeLessThanOrEqual(SHELTER_CAPACITY + MAX_OVERCROWD)
     }

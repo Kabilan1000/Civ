@@ -16,7 +16,7 @@ function populate(s: WorldState, n: number): void {
     const like = founders[k % founders.length]!
     const id = allocateId(s)
     const c = createCitizen(id, `Extra ${id}`, like.role, { ...like.personality }, like.pos, id)
-    c.bornTick = s.tick - 25 * TICKS_PER_YEAR - (k % 40) * TICKS_PER_DAY
+    c.bornTick = s.tick - (s.population.profile.adultAge + 2) * TICKS_PER_YEAR - (k % 40) * TICKS_PER_DAY // an adult in this world's profile
     s.citizens.push(c)
   }
 }

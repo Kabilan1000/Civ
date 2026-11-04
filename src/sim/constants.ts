@@ -2,7 +2,7 @@
 import type { Needs, Role, Stockpile, Terrain } from './types.ts'
 
 /** Bump whenever the serialized WorldState shape changes, and add a migration. */
-export const SCHEMA_VERSION = 9
+export const SCHEMA_VERSION = 10
 
 // ── Time ────────────────────────────────────────────────────────────────────
 
@@ -356,23 +356,45 @@ export const GRUDGE_HEALING = 0.5
 export const AVOID_AFFINITY = -50
 
 // ── Population V1 (schema v7, docs/design/LIVING_WORLD_TDS.md §8) ──────────
-// Ages are in world years (TICKS_PER_YEAR = 48 days), game-paced so a founding
-// generation is replaced within a session at 100×.
-export const ADULT_AGE = 14
-export const ELDER_AGE = 50
-/** Nobody lives past this age: the old-age hazard is certain on this birthday. */
-export const MAX_AGE = 65
-/** Founders' ages at world creation (inclusive). */
-export const FOUNDER_AGE = { min: 18, max: 36 } as const
-/** Partners must both be this age range to have a child. */
-export const FERTILE_AGE = { min: 16, max: 42 } as const
+/**
+ * Demographic profiles (schema v10). A world keeps the profile it was created
+ * with (state.population.profile), so tuning never changes existing worlds.
+ * Ages are in world years (TICKS_PER_YEAR = 48 days).
+ */
+export const CLASSIC_PROFILE = {
+  id: 'classic-v1',
+  adultAge: 14,
+  elderAge: 50,
+  /** Nobody lives past this age: the old-age hazard is certain on this birthday. */
+  maxAge: 65,
+  /** Founders' ages at world creation (inclusive). */
+  founderAge: { min: 18, max: 36 },
+  /** Partners must both be in this age range to have a child. */
+  fertileAge: { min: 16, max: 42 },
+  /** Daily chance (‰) that an eligible couple has a child. */
+  birthChancePermille: 40,
+  /** A parent has at most one child per this many days. */
+  birthSpacingDays: 48,
+} as const
+/**
+ * Accelerated profile for new worlds: generations turn over in minutes at
+ * 100× (adulthood after 5 years = 240 days; founders gone within ~15 years).
+ */
+export const FAST_PROFILE = {
+  id: 'fast-v1',
+  adultAge: 5,
+  elderAge: 15,
+  maxAge: 22,
+  founderAge: { min: 7, max: 12 },
+  fertileAge: { min: 6, max: 16 },
+  birthChancePermille: 40,
+  birthSpacingDays: 48,
+} as const
+/** The profile every new world is created with. */
+export const NEW_WORLD_PROFILE = FAST_PROFILE
 /** Mutual affinity and familiarity both partners need (friendship is 50: deliberately reachable). */
 export const PARTNER_AFFINITY = 30
 export const PARTNER_FAMILIARITY = 30
-/** Daily chance (‰) that an eligible couple has a child. */
-export const BIRTH_CHANCE_PERMILLE = 40
-/** A parent has at most one child per this many days. */
-export const BIRTH_SPACING_DAYS = 48
 /** Births need stockpile food ≥ this × living citizens. */
 export const BIRTH_FOOD_PER_CAPITA = 3
 export const MAX_POPULATION = 60

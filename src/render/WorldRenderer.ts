@@ -509,7 +509,7 @@ export class WorldRenderer implements FrameRenderer {
         this.citizenViews.set(c.id, view)
         this.citizens.addChild(view.root)
       }
-      const stage = lifeStage(c, state.tick)
+      const stage = lifeStage(state, c)
       if (stage !== view.stage) {
         view.stage = stage
         view.root.scale.set(stage === 'child' ? CHILD_SCALE : 1) // children are drawn smaller

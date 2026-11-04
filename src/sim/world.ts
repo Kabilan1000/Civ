@@ -1,6 +1,6 @@
 import { assignFounderAges, createCitizens } from './citizens/create.ts'
 import { resolveConfig } from './config.ts'
-import { INITIAL_STOCKPILE, SCHEMA_VERSION, START_DISCOVERY_RADIUS } from './constants.ts'
+import { INITIAL_STOCKPILE, NEW_WORLD_PROFILE, SCHEMA_VERSION, START_DISCOVERY_RADIUS } from './constants.ts'
 import { pushEvent } from './events.ts'
 import { allocateId } from './ids.ts'
 import { revealAround } from './map/discovery.ts'
@@ -78,6 +78,7 @@ export function createWorld(overrides: Partial<WorldConfig> = {}): WorldState {
     },
     archive: [],
     population: {
+      profile: { ...NEW_WORLD_PROFILE, founderAge: { ...NEW_WORLD_PROFILE.founderAge }, fertileAge: { ...NEW_WORLD_PROFILE.fertileAge } },
       rng: seedRng(`${config.seed}#population`),
       counters: { births: 0, deaths: 0, oldAgeDeaths: 0, partnerships: 0, comingOfAge: 0, archived: 0 },
     },
@@ -85,7 +86,7 @@ export function createWorld(overrides: Partial<WorldConfig> = {}): WorldState {
 
   state.structures.push(createCampfire(allocateId(state), campTile))
   state.citizens = createCitizens(state, campTile)
-  assignFounderAges(state.citizens, config.seed) // own derived stream
+  assignFounderAges(state.citizens, config.seed, state.population.profile) // own derived stream
   recordSample(state) // tick 0
   pushEvent(state, 'worldCreated', state.citizens.map((c) => c.id), {
     seed: config.seed,

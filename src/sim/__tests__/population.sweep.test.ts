@@ -1,6 +1,6 @@
 import { performance } from 'node:perf_hooks'
 import { describe, expect, it } from 'vitest'
-import { ARCHIVE_MAX, MAX_AGE, MAX_MEMORIES, MAX_OVERCROWD, MAX_POPULATION, SHELTER_CAPACITY, TICKS_PER_DAY, TICKS_PER_YEAR } from '../constants.ts'
+import { ARCHIVE_MAX, MAX_MEMORIES, PLANT_SENESCENCE_ENABLED, MAX_OVERCROWD, MAX_POPULATION, SHELTER_CAPACITY, TICKS_PER_DAY, TICKS_PER_YEAR } from '../constants.ts'
 import { isAdjacent4, isPassable } from '../grid.ts'
 import { deserialize, serialize } from '../serialize.ts'
 import type { WorldState } from '../types.ts'
@@ -74,8 +74,8 @@ describe.skipIf(!RUN)('population sweep', () => {
           if (!(n.satiety >= 0 && n.satiety <= 100 && n.energy >= 0 && n.energy <= 100 && n.social >= 0 && n.social <= 100 && n.health >= 0 && n.health <= 100)) bad.push(`t${t}: ${c.name} needs out of range`)
           if (c.memories.length > MAX_MEMORIES) bad.push(`t${t}: ${c.name} memories`)
           const age = Math.floor((s.tick - c.bornTick) / TICKS_PER_YEAR)
-          if (age > MAX_AGE) bad.push(`t${t}: ${c.name} aged ${age}`)
-          if (age < 14 && c.task && !CHILD_ACTIONS.has(c.task.kind)) bad.push(`t${t}: child ${c.name} doing ${c.task.kind}`)
+          if (age > s.population.profile.maxAge) bad.push(`t${t}: ${c.name} aged ${age}`)
+          if (age < s.population.profile.adultAge && c.task && !CHILD_ACTIONS.has(c.task.kind)) bad.push(`t${t}: child ${c.name} doing ${c.task.kind}`)
           if (c.partnerId !== null && byId.get(c.partnerId)?.partnerId !== c.id) bad.push(`t${t}: ${c.name} partner not mutual`)
           const streak = c.task ? 0 : (idle.get(c.id) ?? 0) + 1
           idle.set(c.id, streak)
@@ -85,7 +85,7 @@ describe.skipIf(!RUN)('population sweep', () => {
         if (s.archive.length > ARCHIVE_MAX) bad.push(`t${t}: archive ${s.archive.length}`)
         if (t % TICKS_PER_DAY !== 0) continue
         // ── daily: assert everything collected, plus plant invariants ──
-        bad.push(...plantViolations(s, false))
+        bad.push(...plantViolations(s, PLANT_SENESCENCE_ENABLED))
         expect(bad.slice(0, 5)).toEqual([])
         const day = t / TICKS_PER_DAY
         const c = s.population.counters
