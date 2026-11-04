@@ -2,7 +2,7 @@
 import type { Needs, Role, Stockpile, Terrain } from './types.ts'
 
 /** Bump whenever the serialized WorldState shape changes, and add a migration. */
-export const SCHEMA_VERSION = 10
+export const SCHEMA_VERSION = 11
 
 // ── Time ────────────────────────────────────────────────────────────────────
 
@@ -100,6 +100,11 @@ export const MAX_EVENTS = 200
 export const HISTORY_INTERVAL = 24
 /** At most this many samples are kept (60 days); the oldest are dropped first. */
 export const HISTORY_MAX = 600
+/**
+ * Long-term history (schema v11): one summary per season (12 days), at most
+ * this many — 100 world years. Bounded at about 70 KB of save.
+ */
+export const GENERATIONS_MAX = 400
 
 export interface TerrainRule {
   passable: boolean

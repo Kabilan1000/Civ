@@ -9,6 +9,7 @@ import {
   MAX_OVERCROWD,
   TICKS_PER_DAY,
   TICKS_PER_YEAR,
+  GENERATIONS_MAX,
   HISTORY_MAX,
   MAX_EVENTS,
   MAX_MEMORIES,
@@ -176,6 +177,10 @@ const migrations: Record<number, Migration> = {
   // under. Every existing save lived by the classic profile, so it gets that
   // one — ages, families and histories are untouched; only new worlds use the
   // accelerated profile.
+  // v10 → v11 (long-term history): an empty Generations history. Nothing is
+  // fabricated for the past; the recent 60-day history is kept as it was, and
+  // the long view starts filling at the next season.
+  10: (data) => ({ ...data, generations: [] }),
   9: (data) => ({
     ...data,
     population: {
@@ -536,6 +541,20 @@ function validateWorld(d: Record<string, unknown>): asserts d is Record<string, 
     for (const k of ['population', 'food', 'wood', 'housed', 'capacity', 'discovered']) int(h[k], `${p}.${k}`, 0)
     for (const k of ['satiety', 'energy', 'health', 'social']) int(h[k], `${p}.${k}`, 0, 100)
     for (const k of ['children', 'adults', 'elders', 'births', 'deaths']) if (h[k] !== undefined) int(h[k], `${p}.${k}`, 0)
+  })
+
+  // Generations (v11)
+  const generations = arr(d.generations, 'generations')
+  if (generations.length > GENERATIONS_MAX) fail('generations', `at most ${GENERATIONS_MAX} summaries`)
+  let lastGen = -1
+  generations.forEach((raw, i) => {
+    const p = `generations[${i}]`
+    const g = obj(raw, p)
+    const t = int(g.tick, `${p}.tick`, 1, d.tick as number)
+    if (t <= lastGen) fail(`${p}.tick`, 'strictly increasing ticks')
+    lastGen = t
+    for (const k of ['population', 'children', 'adults', 'elders', 'peak', 'low', 'housed', 'capacity', 'food', 'births', 'deaths']) int(g[k], `${p}.${k}`, 0)
+    if ((g.low as number) > (g.peak as number)) fail(`${p}.low`, 'at most the peak')
   })
 
   // Events

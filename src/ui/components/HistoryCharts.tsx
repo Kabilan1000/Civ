@@ -1,6 +1,8 @@
 import { memo, useMemo, useState } from 'react'
 import type { SimulationController } from '../../app/SimulationController.ts'
-import { HISTORY_INTERVAL, HISTORY_MAX, getHistory } from '../../sim/index.ts'
+import { DAYS_PER_SEASON, GENERATIONS_MAX, HISTORY_INTERVAL, HISTORY_MAX, getGenerations, getHistory, type WorldState } from '../../sim/index.ts'
+import { niceMax } from '../format/chart.ts'
+import { generationLabel, generationYear, populationMarks } from '../format/generations.ts'
 import { formatCalendarTick, seasonMarkers } from '../format/calendar.ts'
 import { formatTick } from '../format/text.ts'
 import { LineChart } from './LineChart.tsx'
@@ -21,6 +23,7 @@ interface Props {
 /** Memoised: re-renders only when a history sample is recorded (or a different world is loaded). */
 export const HistoryCharts = memo(function HistoryCharts({ controller, historyLength, worldId }: Props) {
   const [table, setTable] = useState(false)
+  const [view, setView] = useState<'recent' | 'generations'>('recent')
   const state = controller.state
   void worldId
   const data = useMemo(() => {
@@ -56,11 +59,23 @@ export const HistoryCharts = memo(function HistoryCharts({ controller, historyLe
     <section className="panel history" aria-label="History">
       <div className="panel-title-row">
         <h2>History</h2>
-        <button type="button" className="chip" aria-pressed={table} onClick={() => setTable(!table)} title="Show the latest samples as a table">
-          Table
-        </button>
+        <div className="chips" role="group" aria-label="History range">
+          <button type="button" className="chip" aria-pressed={view === 'recent'} onClick={() => setView('recent')} title="The last 60 days, ten snapshots a day">
+            Recent
+          </button>
+          <button type="button" className="chip" aria-pressed={view === 'generations'} onClick={() => setView('generations')} title="One summary per season, up to 100 world years">
+            Generations
+          </button>
+          {view === 'recent' && (
+            <button type="button" className="chip" aria-pressed={table} onClick={() => setTable(!table)} title="Show the latest samples as a table">
+              Table
+            </button>
+          )}
+        </div>
       </div>
-      {data.samples.length < 2 ? (
+      {view === 'generations' ? (
+        <GenerationsView state={state} version={historyLength} />
+      ) : data.samples.length < 2 ? (
         <p className="empty">
           History builds up as the village lives: a snapshot is recorded every {HISTORY_INTERVAL} ticks.
           {data.samples.length === 0 && ' (Worlds loaded from older saves start recording from the next snapshot.)'}
@@ -130,9 +145,76 @@ export const HistoryCharts = memo(function HistoryCharts({ controller, historyLe
           />
         </div>
       )}
-      <p className="muted small">
-        {data.samples.length} snapshots, one every {HISTORY_INTERVAL} ticks (10 per day); the last {HISTORY_MAX} are kept.
-      </p>
+      {view === 'recent' && (
+        <p className="muted small">
+          {data.samples.length} snapshots, one every {HISTORY_INTERVAL} ticks (10 per day); the last {HISTORY_MAX} are kept.
+        </p>
+      )}
     </section>
   )
 })
+
+/** Long-term history: one real summary per season, up to 100 world years (schema v11). */
+function GenerationsView({ state, version }: { state: WorldState; version: number }) {
+  const rows = useMemo(() => getGenerations(state), [state, version]) // eslint-disable-line react-hooks/exhaustive-deps
+  if (rows.length < 2) {
+    return (
+      <p className="empty">
+        The long view builds up one season at a time — a summary every {DAYS_PER_SEASON} days, kept for up to {GENERATIONS_MAX / 4} world years.
+        {rows.length === 0 && ' Worlds loaded from older saves start recording at their next season; earlier seasons were never summarised, so they stay blank.'}
+      </p>
+    )
+  }
+  const ticks = rows.map((r) => r.tick)
+  const marks = populationMarks(rows.map((r) => r.population))
+  const markers = [
+    ...(marks.peak ? [{ at: marks.peak.at, label: `Peak: ${marks.peak.value} people (${generationLabel(ticks[marks.peak.at]!)})`, short: 'Peak' }] : []),
+    ...(marks.decline
+      ? [{ at: marks.decline.to, label: `Largest decline: ${marks.decline.high} → ${marks.decline.low} people (${generationLabel(ticks[marks.decline.from]!)} to ${generationLabel(ticks[marks.decline.to]!)})`, short: 'Low' }]
+      : []),
+  ].sort((a, b) => a.at - b.at)
+  const nets = rows.map((r) => r.net)
+  const minNet = Math.min(0, ...nets.filter((v): v is number => v !== null))
+  const common = { ticks, formatX: generationYear, formatTooltip: generationLabel }
+  const first = rows[0]!.tick
+  return (
+    <>
+      <div className="charts">
+        <LineChart
+          title="Population by season"
+          {...common}
+          markers={markers}
+          series={[
+            { label: 'Living', color: S1, values: rows.map((r) => r.population) },
+            { label: 'Children', color: S3, values: rows.map((r) => r.children) },
+            { label: 'Adults', color: S2, values: rows.map((r) => r.adults) },
+            { label: 'Elders', color: S4, values: rows.map((r) => r.elders) },
+          ]}
+        />
+        <LineChart
+          title="Births & deaths per season"
+          {...common}
+          yMin={minNet < 0 ? -niceMax(-minNet) : 0}
+          series={[
+            { label: 'Births', color: S3, values: rows.map((r) => r.seasonBirths) },
+            { label: 'Deaths', color: S2, values: rows.map((r) => r.seasonDeaths) },
+            { label: 'Net', color: S1, values: nets },
+          ]}
+        />
+        <LineChart
+          title="Housing"
+          {...common}
+          series={[
+            { label: 'Housed', color: S1, values: rows.map((r) => r.housed) },
+            { label: 'Beds', color: S2, values: rows.map((r) => r.capacity) },
+          ]}
+        />
+        <LineChart title="Food at season's end" {...common} series={[{ label: 'Food', color: S1, values: rows.map((r) => r.food) }]} />
+      </div>
+      <p className="muted small">
+        {rows.length} seasons ({(rows.length / 4).toFixed(1)} world years) from {generationLabel(first)}, one real summary per season; the last {GENERATIONS_MAX} (
+        {GENERATIONS_MAX / 4} years) are kept. Births and deaths are counted per season.
+      </p>
+    </>
+  )
+}

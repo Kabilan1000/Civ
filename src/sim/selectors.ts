@@ -1,5 +1,5 @@
 // Read-only helpers for the UI and renderer. Never mutate state here.
-import { FRIENDSHIP_AFFINITY, MAX_EVENTS, RIVALRY_AFFINITY, SHELTER_CAPACITY, type DayPhase } from './constants.ts'
+import { FRIENDSHIP_AFFINITY, MAX_EVENTS, RIVALRY_AFFINITY, SHELTER_CAPACITY, TICKS_PER_SEASON, type DayPhase } from './constants.ts'
 import { stepCost, toPoint } from './grid.ts'
 import { ageYears, lifeStage, type LifeStage } from './citizens/life.ts'
 import { FRESHNESS_STALE, freshnessOf } from './map/visibility.ts'
@@ -9,6 +9,7 @@ import type {
   ActionKind,
   ActionScore,
   Citizen,
+  GenerationSample,
   HistorySample,
   Memory,
   Needs,
@@ -439,6 +440,27 @@ export function getEvents(state: WorldState, categories?: readonly EventCategory
     if (!wanted || wanted.has(EVENT_CATEGORIES[e.kind])) out.push(e)
   }
   return out
+}
+
+export interface GenerationRow extends GenerationSample {
+  /** Births and deaths during this season, and the net change; null where the previous summary is missing (gaps, never guesses). */
+  seasonBirths: number | null
+  seasonDeaths: number | null
+  net: number | null
+}
+
+/**
+ * Long-term history rows (schema v11), oldest first. Per-season births and
+ * deaths are differences of the stored cumulative counts; the first season of
+ * a world counts from zero only if the world itself started there.
+ */
+export function getGenerations(state: WorldState): GenerationRow[] {
+  return state.generations.map((g, i) => {
+    const prev = i > 0 ? state.generations[i - 1]! : g.tick === TICKS_PER_SEASON ? { births: 0, deaths: 0 } : null
+    const seasonBirths = prev ? g.births - prev.births : null
+    const seasonDeaths = prev ? g.deaths - prev.deaths : null
+    return { ...g, seasonBirths, seasonDeaths, net: prev ? seasonBirths! - seasonDeaths! : null }
+  })
 }
 
 export function getHistory(state: WorldState): readonly HistorySample[] {

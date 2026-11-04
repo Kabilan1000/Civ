@@ -71,6 +71,7 @@ export function createWorld(overrides: Partial<WorldConfig> = {}): WorldState {
       woodDecayed: 0,
     },
     history: [],
+    generations: [],
     events: [],
     ecology: {
       rng: seedRng(`${config.seed}#ecology`),

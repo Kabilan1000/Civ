@@ -501,6 +501,18 @@ over the living, rounded to integers, so samples are compact and exactly
 reproducible. Nothing is back-filled: a save migrated from v4 starts with an
 empty history and records from its next interval.
 
+**Generations (schema v11).** At the first tick of every season, after that
+tick's sample, `recordGeneration` appends one `GenerationSample` — the real
+end-of-season population by stage, housed/beds and food, the season's peak
+and low (from its recent samples), and the cumulative birth and death
+counters. At most `GENERATIONS_MAX` (400 seasons = 100 world years) are kept.
+`getGenerations` derives per-season births, deaths and net change from
+consecutive rows; the first row has them only if it is the world's first
+season, so a save migrated to v11 (empty record) never shows invented counts.
+The History panel has a **Recent** view (60 days of samples) and a
+**Generations** view (these summaries, axis in world years, tooltips with
+season and year, the peak and the largest decline marked).
+
 ### 3.13 Read-only selectors (M7, `sim/selectors.ts`)
 
 `getCivStats` (population, dead, stockpile, shelters by stage, housing
@@ -625,6 +637,7 @@ interface SimEvent {
 // they can never go stale. Only the bounded history series is stored (M7):
 // history: HistorySample[] — { tick, population, food, wood, housed,
 //   capacity, discovered, satiety, energy, health, social } (integers)
+// generations: GenerationSample[] — one per season (v11), ≤ 400
 
 interface WorldConfig {
   seed: string;

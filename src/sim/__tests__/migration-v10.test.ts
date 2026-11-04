@@ -1,7 +1,8 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { ageYears } from '../citizens/life.ts'
-import { CLASSIC_PROFILE, FAST_PROFILE, SCHEMA_VERSION, TICKS_PER_DAY } from '../constants.ts'
+import { CLASSIC_PROFILE, FAST_PROFILE, GENERATIONS_MAX, SCHEMA_VERSION, TICKS_PER_DAY, TICKS_PER_SEASON } from '../constants.ts'
+import { getGenerations } from '../selectors.ts'
 import { deserialize, SaveError, serialize } from '../serialize.ts'
 import { createWorld, stepN } from '../world.ts'
 
@@ -49,5 +50,41 @@ describe('demographic profiles (schema v10)', () => {
     const r = JSON.parse(serialize(createWorld({ seed: 'profile-bad' })))
     mutate(r)
     expect(() => deserialize(JSON.stringify(r))).toThrow(SaveError)
+  })
+})
+
+describe('long-term history (schema v11)', () => {
+  for (const file of fixtures) {
+    it(`${file}: migrates with an empty long-term record and keeps every recent sample`, () => {
+      const json = readFileSync(new URL(`./fixtures/${file}`, import.meta.url), 'utf8')
+      const raw = JSON.parse(json)
+      const w = deserialize(json)
+      expect(w.generations).toEqual([]) // never back-filled from samples that were not summaries
+      expect(w.history).toEqual(raw.history)
+    })
+  }
+
+  it('the first summary after a mid-season load shows no invented per-season counts', () => {
+    const w = deserialize(readFileSync(new URL('./fixtures/popv1-save-v7-30.json', import.meta.url), 'utf8'))
+    stepN(w, TICKS_PER_SEASON - (w.tick % TICKS_PER_SEASON))
+    const rows = getGenerations(w)
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({ seasonBirths: null, seasonDeaths: null, net: null })
+  })
+
+  it('rejects corrupt long-term records', () => {
+    const s = createWorld({ seed: 'gen-corrupt' })
+    stepN(s, 2 * TICKS_PER_SEASON)
+    const bad = (f: (g: Record<string, unknown>[]) => void) => {
+      const d = JSON.parse(serialize(s))
+      f(d.generations)
+      return () => deserialize(JSON.stringify(d))
+    }
+    expect(bad(() => {})).not.toThrow()
+    expect(bad((g) => (g[1]!.tick = g[0]!.tick))).toThrow(SaveError)
+    expect(bad((g) => (g[0]!.low = (g[0]!.peak as number) + 1))).toThrow(SaveError)
+    expect(bad((g) => (g[0]!.births = -1))).toThrow(SaveError)
+    expect(bad((g) => (g[0]!.tick = 10 ** 9))).toThrow(SaveError)
+    expect(bad((g) => g.push(...Array.from({ length: GENERATIONS_MAX }, () => g[0]!)))).toThrow(SaveError)
   })
 })

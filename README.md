@@ -129,7 +129,10 @@ is gone in about 4–6 minutes. Worlds saved before this change keep the
 slower rules they began with (adult at 14, elder at 50, at most 65). Villages differ: food
 and space set how far each one grows. The dashboard counts children, adults,
 elders, couples, births and deaths; the inspector shows each citizen's age and
-family; the History panel charts children, elders, births and deaths.
+family. The History panel has two views: **Recent** (the last 60 days in
+detail) and **Generations** (a summary per season for up to 100 world years:
+population by life stage, births, deaths and net change per season,
+housing and food, with the highest peak and the largest decline marked).
 
 **The calendar.** The clock shows the season, day and year — for example
 “Spring 3, Year 1 · 14:42” — with the world's absolute day beside it (and in
@@ -207,8 +210,10 @@ housing, food/wood, exploration, social and performance figures.
   are no trade, player commands, genetics or illness.
 - Saves are per-browser (localStorage); there is no cloud sync or file
   export.
-- The event feed keeps only the last 200 events; history keeps the last 60
-  days.
+- The event feed keeps only the last 200 events; detailed history keeps the
+  last 60 days and the Generations view one summary per season for 100
+  world years. Saves from before this version start their Generations record
+  at their next season.
 - On weak or software-only graphics the map lowers its drawing resolution
   automatically (down to 0.75×) to stay smooth, which makes it slightly
   softer.

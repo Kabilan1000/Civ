@@ -351,6 +351,28 @@ export interface HistorySample {
   deaths?: number
 }
 
+/**
+ * One season of long-term history (schema v11), recorded at the first tick of
+ * the next season from real state and the recent samples of that season.
+ */
+export interface GenerationSample {
+  /** The season-start tick at which the summary was taken (the season before it ended). */
+  tick: number
+  population: number
+  children: number
+  adults: number
+  elders: number
+  /** Highest and lowest living population among the recent samples taken during the season. */
+  peak: number
+  low: number
+  housed: number
+  capacity: number
+  food: number
+  /** Cumulative births and deaths (population counters) — per-season figures are the differences. */
+  births: number
+  deaths: number
+}
+
 export interface WorldConfig {
   seed: string
   width: number
@@ -374,8 +396,10 @@ export interface WorldState {
   structures: Structure[]
   stockpile: Stockpile
   ledger: Ledger
-  /** Oldest first; at most HISTORY_MAX samples. */
+  /** Oldest first; at most HISTORY_MAX samples (the last 60 days). */
   history: HistorySample[]
+  /** One summary per season, oldest first; at most GENERATIONS_MAX (≈100 world years). */
+  generations: GenerationSample[]
   /** Oldest first; capped at MAX_EVENTS. */
   events: SimEvent[]
   ecology: EcologyState
