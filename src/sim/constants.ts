@@ -2,7 +2,7 @@
 import type { Needs, Role, Stockpile, Terrain } from './types.ts'
 
 /** Bump whenever the serialized WorldState shape changes, and add a migration. */
-export const SCHEMA_VERSION = 11
+export const SCHEMA_VERSION = 12
 
 // ── Time ────────────────────────────────────────────────────────────────────
 

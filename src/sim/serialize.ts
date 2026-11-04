@@ -181,13 +181,28 @@ const migrations: Record<number, Migration> = {
   // fabricated for the past; the recent 60-day history is kept as it was, and
   // the long view starts filling at the next season.
   10: (data) => ({ ...data, generations: [] }),
-  9: (data) => ({
-    ...data,
-    population: {
-      ...(data.population as Record<string, unknown>),
-      profile: { ...CLASSIC_PROFILE, founderAge: { ...CLASSIC_PROFILE.founderAge }, fertileAge: { ...CLASSIC_PROFILE.fertileAge } },
-    },
-  }),
+  // The v10 profile shape had no carrying-capacity field (added in v12 below).
+  9: (data) => {
+    const { birthBushesPerPersonPermille: _added, ...v10Classic } = CLASSIC_PROFILE
+    void _added
+    return {
+      ...data,
+      population: {
+        ...(data.population as Record<string, unknown>),
+        profile: { ...v10Classic, founderAge: { ...CLASSIC_PROFILE.founderAge }, fertileAge: { ...CLASSIC_PROFILE.fertileAge } },
+      },
+    }
+  },
+  // v11 → v12 (carrying capacity): births in new fast-profile worlds also need
+  // bearing berry bushes per person. Every existing world — classic or fast —
+  // was simulated without that check, so it keeps living without it (0 = no
+  // check): its demographics are never changed by loading it. Everything
+  // else is untouched.
+  11: (data) => {
+    const population = data.population as Record<string, unknown>
+    const profile = population.profile as Record<string, unknown>
+    return { ...data, population: { ...population, profile: { ...profile, birthBushesPerPersonPermille: 0 } } }
+  },
 }
 
 export function serialize(state: WorldState): string {
