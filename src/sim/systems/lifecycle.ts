@@ -138,8 +138,20 @@ function birthHome(state: WorldState, a: Citizen, b: Citizen): { parent: Citizen
   return options[0] ? { parent: options[0].parent, homeId: options[0].home.id } : null
 }
 
+/** Berry bushes that bear fruit (young, mature or old) on discovered land. */
+export function bearingBushes(state: WorldState): number {
+  let n = 0
+  const { resources, discovered } = state.map
+  for (let i = 0; i < resources.length; i++) {
+    const r = resources[i]
+    if (r && r.kind === 'berries' && r.stage !== 'seedling' && r.stage !== 'dead' && discovered[i] === 1) n++
+  }
+  return n
+}
+
 function births(state: WorldState): void {
   const tick = state.tick
+  let bushes = -1 // counted once, only if some couple gets this far
   for (const a of [...state.citizens]) {
     const b = a.partnerId === null ? undefined : state.citizens.find((c) => c.id === a.partnerId)
     if (!a.alive || !b || !b.alive || b.id < a.id) continue // each couple once, from its lower id
@@ -148,6 +160,10 @@ function births(state: WorldState): void {
     const p = state.population.profile
     if (!fertile(a, tick, p) || !fertile(b, tick, p) || !rested(a, tick, p) || !rested(b, tick, p)) continue
     if (state.stockpile.food < BIRTH_FOOD_PER_CAPITA * living) continue
+    if (p.birthBushesPerPersonPermille > 0) {
+      if (bushes < 0) bushes = bearingBushes(state)
+      if (bushes * 1000 < p.birthBushesPerPersonPermille * (living + 1)) continue
+    }
     const home = birthHome(state, a, b)
     if (!home) continue
     if (nextInt(state.population.rng, 0, 999) >= p.birthChancePermille) continue

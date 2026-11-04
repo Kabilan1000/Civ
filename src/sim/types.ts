@@ -210,6 +210,11 @@ export interface DemographicProfile {
   fertileAge: { min: number; max: number }
   birthChancePermille: number
   birthSpacingDays: number
+  /**
+   * Births need at least this many (‰) bearing berry bushes on known land per
+   * person, the newborn included — the land's carrying capacity. 0 = no check.
+   */
+  birthBushesPerPersonPermille: number
 }
 
 /** Population bookkeeping (Population V1). People themselves are in `citizens` and `archive`. */

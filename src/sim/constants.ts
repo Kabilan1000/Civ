@@ -378,6 +378,8 @@ export const CLASSIC_PROFILE = {
   fertileAge: { min: 16, max: 42 },
   /** Daily chance (‰) that an eligible couple has a child. */
   birthChancePermille: 40,
+  /** Carrying capacity: classic worlds never had this check. */
+  birthBushesPerPersonPermille: 0,
   /** A parent has at most one child per this many days. */
   birthSpacingDays: 48,
 } as const
@@ -394,6 +396,12 @@ export const FAST_PROFILE = {
   fertileAge: { min: 6, max: 16 },
   birthChancePermille: 40,
   birthSpacingDays: 48,
+  /**
+   * Bearing berry bushes per person (‰) a birth needs. Short lives fill the
+   * village quickly; without this a village of 60 strips every bush, seeding
+   * stops and the food supply collapses (famine). See TDS §8.3c.
+   */
+  birthBushesPerPersonPermille: 1000,
 } as const
 /** The profile every new world is created with. */
 export const NEW_WORLD_PROFILE = FAST_PROFILE

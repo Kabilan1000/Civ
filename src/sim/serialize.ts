@@ -313,6 +313,7 @@ function validateWorld(d: Record<string, unknown>): asserts d is Record<string, 
   }
   int(prof.birthChancePermille, 'population.profile.birthChancePermille', 0, 1000)
   int(prof.birthSpacingDays, 'population.profile.birthSpacingDays', 1, 10000)
+  int(prof.birthBushesPerPersonPermille, 'population.profile.birthBushesPerPersonPermille', 0, 100000)
 
   // Map
   const map = obj(d.map, 'map')
