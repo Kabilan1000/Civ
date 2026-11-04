@@ -135,7 +135,26 @@ elders, couples, births and deaths; the inspector shows each citizen's age and
 family. The History panel has two views: **Recent** (the last 60 days in
 detail) and **Generations** (a summary per season for up to 100 world years:
 population by life stage, births, deaths and net change per season,
-housing and food, with the highest peak and the largest decline marked).
+housing and food, with the highest peak and the largest decline marked, and
+— from this version — people and land by season).
+
+**Land & ecology.** A panel under the map shows the environment the village
+lives in, from a census taken every dawn (kept for 60 days):
+
+- **Last 5 days vs the 5 before:** people (with births and deaths), food
+  per person, whether forage near the campfire is improving, getting worse,
+  mixed or steady (berries on nearby bushes, nearby bushes, steps per
+  forage trip), and — in new worlds — how often births were held back
+  because the land had too few fruiting bushes per person. These show what
+  changed together; they don't claim one change caused another.
+- **Now:** berry bushes and trees by growth stage, deadwood, berries near
+  the campfire, the average forage trip, how much known land is seen
+  recently, fading or stale, and explorers' resurvey trips.
+- **Charts:** people and land, near the campfire, berries picked / regrown /
+  lost each day, plants on the island, plant births and deaths, and land
+  out of view with resurveys.
+
+Older saves start this record at their next dawn; nothing is reconstructed.
 
 **The calendar.** The clock shows the season, day and year — for example
 “Spring 3, Year 1 · 14:42” — with the world's absolute day beside it (and in

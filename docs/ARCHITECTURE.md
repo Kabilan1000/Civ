@@ -503,6 +503,24 @@ over the living, rounded to integers, so samples are compact and exactly
 reproducible. Nothing is back-filled: a save migrated from v4 starts with an
 empty history and records from its next interval.
 
+**Ecology record and activity tallies (schema v13, M10d — observation
+only).** `ecology/census.ts` takes one census: plants by kind and stage on
+the whole island, deadwood and its wood, berries on bushes, bearing bushes
+on known land (the carrying-capacity count), bearing bushes and their
+berries/capacity within `NEAR_CAMP_TILES` (8, 4-neighbour distance) of the
+campfire, known land by freshness, and copies of the cumulative counters.
+`recordEcoSample` stores it at every dawn (after every system) in
+`ecoHistory`, at most `ECO_HISTORY_MAX` (60 days); the dashboard runs the
+same function live, so displayed and stored figures cannot disagree.
+`state.activity` tallies forage trips and their walking steps
+(`startGather`), explorer resurvey trips (`startExplore`) and couple-days
+held back by the land alone (`births()`: every other birth condition met,
+home included). Nothing reads these in a decision and no randomness is
+drawn: a test clears them mid-run and the villagers behave identically.
+New season summaries also carry `bearing`, `nearBushes` and `held`.
+`getEcoDays` turns the record into per-day differences (gaps stay null).
+v12 → v13 adds an empty record and zero tallies; nothing is reconstructed.
+
 **Generations (schema v11).** At the first tick of every season, after that
 tick's sample, `recordGeneration` appends one `GenerationSample` — the real
 end-of-season population by stage, housed/beds and food, the season's peak
@@ -640,6 +658,8 @@ interface SimEvent {
 // history: HistorySample[] — { tick, population, food, wood, housed,
 //   capacity, discovered, satiety, energy, health, social } (integers)
 // generations: GenerationSample[] — one per season (v11), ≤ 400
+// ecoHistory: EcoSample[] — one ecology census per dawn (v13), ≤ 60
+// activity: { forageTrips, forageSteps, resurveys, birthsHeldByLand } (v13)
 
 interface WorldConfig {
   seed: string;
@@ -990,8 +1010,9 @@ Each milestone is merged only when its "done when" holds and `npm test`,
 | **M9** | **Balance & polish** — long-run sweep (`npm run sweep`), evidence-based tuning, construction loop fix, adaptive render resolution, keyboard shortcuts, accessibility, README. | Sweep invariants hold over 30 seeds × 30 days and 3 × 100 days; perf tests pass; browser soak at 10x has no errors. |
 | **Pop V1** | **Population V1** — ages and life stages, founders' ages, partnerships, births, children, coming of age, old-age death, household housing with growth, 60-citizen cap, archive, family UI (schema v7; `design/LIVING_WORLD_TDS.md` §8). | Births, adulthood and old age verified in controlled tests and a 12-seed × 50-year sweep; conservation every tick; save/resume exact across births and deaths. |
 | **M10a** | **World calendar** — pure season/year functions, clock, feed separators, chart season lines (all UI-derived); 100x speed. | `serialize()` byte-identical to pre-M10a golden hashes for 5 seeds × 5 checkpoints; calendar boundary tests. |
+| **M10d** | **World observability** — daily ecology census and activity tallies (schema v13, observation only), ecology selectors, Land & ecology panel (5-day comparisons, plants by stage, near-camp forage, foraging distance, land freshness, resurveys, births held by land, six 60-day charts), people-and-land season chart. | Census exact on hand-built maps and equal to the simulation every dawn; tallies equal independently counted events; clearing the record leaves behaviour identical; genuine v12 save continues a world year exactly as version 6; panel figures and tooltips equal the selectors in the browser at 16/32/57 people; speed unchanged from version 6. |
 
-All milestones M0–M9 are complete (the MVP). After it: M10a (calendar, 100×), the M10b checkpoint (plant lifecycles, senescence gated off) and Population V1 are complete; M10c–M10d resume next (`design/LIVING_WORLD_TDS.md`).
+All milestones M0–M9 are complete (the MVP). After it: M10a (calendar, 100×), M10b (plant lifecycles), Population V1, M10c (living ecology), returning fog, the accelerated profile with long-term history, and M10d (world observability) are complete (`design/LIVING_WORLD_TDS.md`).
 
 ### Out of scope for the MVP
 
