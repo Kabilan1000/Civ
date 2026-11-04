@@ -50,6 +50,12 @@ export function Dashboard({ snapshot }: { snapshot: SimulationSnapshot }) {
           sub="children · adults · elders"
           hint={`Children are under ${ADULT_AGE}, elders ${ELDER_AGE} or older (in world years of 48 days).`}
         />
+        <Stat
+          label="Plants"
+          value={`${s.plants.bushes} · ${s.plants.trees}`}
+          sub={`bushes · trees · ${s.plants.seedlings} sprouting`}
+          hint={`Living berry bushes and trees on the island (seedlings included), plus ${s.plants.deadwood} dead trees left as deadwood. Plants grow, age, spread their seeds and die; a bush picked bare can't spread.`}
+        />
         <Stat label="Couples" value={s.people.couples} sub="partnerships" hint="Living partners. Couples with a home and enough food in the village may have children." />
         <Stat
           label="Births · deaths"

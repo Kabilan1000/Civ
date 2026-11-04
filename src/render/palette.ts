@@ -26,6 +26,13 @@ export const COLORS = {
   bush: 0x4c8a37,
   bushBare: 0x6b7f4a,
   berry: 0xd9475a,
+  // Plant stages (M10c)
+  bushOld: 0x7d8a52,
+  berryOld: 0xb5636c,
+  sprout: 0x8fd36b,
+  canopyOld: 0x5b6a2e,
+  canopyOldLight: 0x7c8a43,
+  snag: 0x9a948a,
   log: 0x7a4f2a,
   flame: 0xf59e2b,
   flameCore: 0xffe08a,

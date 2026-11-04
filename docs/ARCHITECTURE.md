@@ -305,16 +305,24 @@ only, planned once) → arrival phase (`ai/phases.ts`): `gather`, `deposit`,
   bush below max regrows 1 (5/day); every 160 ticks each mature tree
   regrows 1. Bushes hold 6, trees 8. Depleted plants stay (bare bush /
   stump) and regrow.
-- **Plant lifecycle (M10b, checkpoint):** plants carry a stage (seedling,
-  young, mature, old, dead), `bornTick` and `lifespanDays`; stage caps and
-  regrowth rates follow `PLANT_STAGE_MAX` / `PLANT_REGROWTH`; dead trees are
-  harvestable deadwood that rots 1 unit per 4 days (`ledger.woodDecayed`).
-  Initial plants get staggered ages in the mature window from a creation-only
-  `seed#flora` stream (placement unchanged). **Senescence (old age and death)
-  is gated off** (`PLANT_SENESCENCE_ENABLED = false`) until reproduction
-  (M10c): plants age but stay mature, which is exactly v0.1 behaviour —
-  verified by behaviour-parity hashes against the pre-M10b simulation.
-  Tests run the full lifecycle via `stepWithRules`.
+- **Plant lifecycle (M10b) and reproduction (M10c), `systems/ecology.ts`:**
+  plants carry a stage (seedling, young, mature, old, dead), `bornTick` and
+  `lifespanDays`; stage caps and regrowth rates follow `PLANT_STAGE_MAX` /
+  `PLANT_REGROWTH`. Plants grow old and die (bushes vanish, their remaining
+  berries decaying and possibly sprouting as fallen fruit; trees become
+  harvestable deadwood that rots 1 unit per 4 days). Each dawn, mature and
+  old plants holding at least `SEED_MIN_UNITS` may cast a seed within
+  `DISPERSAL_RADIUS`; it germinates only on a free, suitable
+  (`ecology/habitat.ts`), uncrowded tile outside the settled clearing
+  (Manhattan ≤ 2 of any structure; plants already there stay) and below the
+  safety cap. Seedlings hold nothing, so reproduction adds no resources.
+  All ecology randomness comes from `state.ecology.rng`; it never reads
+  citizens or stockpiles (no rescue). Shelter sites may claim a seedling
+  tile. Initial plants get staggered ages from a creation-only `seed#flora`
+  stream (placement unchanged); saves from before M10c are migrated to v8
+  with re-staggered ages, because plants that kept ageing while senescence
+  was off would otherwise all die at the first dawn. `EcologyRules` let the
+  parity tests switch senescence and reproduction off.
 - **Conservation:** all transfers move whole units, and `state.ledger`
   counts gathered, regrown and eaten units so that, at every tick,
   `map + carried + stockpile + eaten + lost + decayed − regrown` is constant

@@ -72,13 +72,18 @@ type AgeDraw = (kind: ResourceKind, tile: number, attempt: number) => { lifespan
  * Every age lies in the mature window, so every plant starts (and stays, with
  * senescence off) mature. `draw` must be deterministic.
  */
-function staggeredAges(map: TileMap, draw: AgeDraw, apply: (node: ResourceNode, lifespanDays: number, ageDays: number) => void): void {
+function staggeredAges(
+  map: TileMap,
+  draw: AgeDraw,
+  apply: (node: ResourceNode, lifespanDays: number, ageDays: number) => void,
+  include: (node: ResourceNode) => boolean = () => true,
+): void {
   const count: Record<ResourceKind, number> = { berries: 0, wood: 0 }
-  for (const n of map.resources) if (n) count[n.kind]++
+  for (const n of map.resources) if (n && include(n)) count[n.kind]++
   const cap = (kind: ResourceKind) => Math.max(1, Math.floor((count[kind] * MAX_SAME_DAY_DEATHS_PERMILLE) / 1000))
   const perDeathDay: Record<ResourceKind, Map<number, number>> = { berries: new Map(), wood: new Map() }
   map.resources.forEach((node, tile) => {
-    if (!node) return
+    if (!node || !include(node)) return
     const used = perDeathDay[node.kind]
     let pick = draw(node.kind, tile, 0)
     for (let attempt = 1; attempt < STAGGER_ATTEMPTS && (used.get(pick.lifespanDays - pick.ageDays) ?? 0) >= cap(node.kind); attempt++) {
@@ -124,12 +129,12 @@ export function assignInitialAges(map: TileMap, seed: string): void {
  * day so ages advance at dawn like every other plant's. Plants are only given
  * ages: none is removed, moved or changed in amount.
  */
-export function assignMigratedAges(map: TileMap, seed: string, tick: number): void {
+export function assignMigratedAges(map: TileMap, seed: string, tick: number, salt = '', include?: (node: ResourceNode) => boolean): void {
   const dayStart = tick - (tick % TICKS_PER_DAY)
   staggeredAges(
     map,
     (kind, tile, attempt) => {
-      let h = fnv1a32(`${seed}:${tile}:${attempt}`)
+      let h = fnv1a32(`${seed}:${salt}${tile}:${attempt}`)
       return lifeFrom(kind, (min, max) => {
         const v = min + (h % (max - min + 1))
         h = fnv1a32(`${h}`)
@@ -142,6 +147,7 @@ export function assignMigratedAges(map: TileMap, seed: string, tick: number): vo
       node.bornTick = dayStart - ageDays * TICKS_PER_DAY
       node.diedTick = null
     },
+    include,
   )
 }
 

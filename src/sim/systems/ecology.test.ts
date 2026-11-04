@@ -15,14 +15,17 @@ import {
   TREE_REGROW_INTERVAL,
   TREE_WOOD_MAX,
 } from '../constants.ts'
-import { oldAtDays, plantAgeDays, stageForAge } from '../ecology/flora.ts'
+import { oldAtDays, plantAgeDays, plantNode, stageForAge } from '../ecology/flora.ts'
 import type { ResourceNode, WorldState } from '../types.ts'
-import { createWorld, stepWithRules } from '../world.ts'
+import { createWorld, step, stepWithRules } from '../world.ts'
+import { clearingMask, safetyCap, suitability } from '../ecology/habitat.ts'
+import { chooseSite } from '../structures.ts'
+import { planShelter } from './construction.ts'
 import { DEFAULT_ECOLOGY_RULES, updateEcology, type EcologyRules } from './ecology.ts'
 import { advanceTasks } from './tasks.ts'
 
-const ON: EcologyRules = { senescence: true }
-const OFF: EcologyRules = { senescence: false }
+const ON: EcologyRules = { senescence: true, reproduction: false } // lifecycle tests: no seeds unless asked
+const OFF: EcologyRules = { senescence: false, reproduction: false }
 const dawn = (day: number) => (day - 1) * TICKS_PER_DAY // first tick of day `day`
 
 /** A one-plant world: `rows` is a single sandbox row; the plant sits on tile 0. */
@@ -48,11 +51,11 @@ describe('lifecycle tables', () => {
     }
   })
 
-  it('mature caps equal v0.1, and senescence is off by default in M10b', () => {
+  it('mature caps equal v0.1; senescence and reproduction are on together (M10c)', () => {
     expect(PLANT_STAGE_MAX.berries.mature).toBe(BERRY_MAX)
     expect(PLANT_STAGE_MAX.wood.mature).toBe(TREE_WOOD_MAX)
-    expect(PLANT_SENESCENCE_ENABLED).toBe(false)
-    expect(DEFAULT_ECOLOGY_RULES.senescence).toBe(false)
+    expect(PLANT_SENESCENCE_ENABLED).toBe(true)
+    expect(DEFAULT_ECOLOGY_RULES).toEqual({ senescence: true, reproduction: true })
   })
 
   it('stageForAge: bush with a 40-day life (old at day 32)', () => {
@@ -280,6 +283,227 @@ describe('whole simulation with senescence on (the M10c configuration, minus rep
       // exactly why senescence stays off until M10c.
       expect(s.map.resources.filter((r) => r?.kind === 'berries').length).toBe(0)
       void deadwoodChopped
+    })
+  }
+})
+
+// ── M10c: reproduction, habitat, clearing, recovery ──────────────────────────
+
+const FULL: EcologyRules = { senescence: true, reproduction: true }
+const GRASS = (w: number, h: number) => Array.from({ length: h }, () => '.'.repeat(w))
+
+/** A grass field with the campfire in a far corner (its clearing covers only that corner). */
+function field(w = 15, h = 15) {
+  const { state } = sandbox(GRASS(w, h), { camp: [0, 0], citizens: [{ x: 0, y: 1 }] })
+  state.citizens[0]!.nextDecisionTick = Number.MAX_SAFE_INTEGER
+  return state
+}
+const at = (s: WorldState, x: number, y: number) => y * s.map.width + x
+function putBush(s: WorldState, x: number, y: number, opts: Partial<ResourceNode> = {}) {
+  s.map.resources[at(s, x, y)] = { ...plantNode('berries'), bornTick: 0, lifespanDays: 44, ...opts }
+}
+const bushes = (s: WorldState) => s.map.resources.filter((r) => r?.kind === 'berries')
+
+describe('habitat suitability', () => {
+  it('bushes like grass, tolerate forest shade poorly, need grass beside sand; trees like forest and forest edges', () => {
+    const { state: s } = sandbox(['.fs~#', '.....', 'TTT..'], { camp: [4, 1], citizens: [{ x: 3, y: 1 }] })
+    expect(suitability(s.map, 'berries', at(s, 0, 0))).toBe(100)
+    expect(suitability(s.map, 'berries', at(s, 1, 0))).toBe(30)
+    expect(suitability(s.map, 'berries', at(s, 2, 0))).toBe(15) // sand next to grass
+    expect(suitability(s.map, 'berries', at(s, 3, 0))).toBe(0)
+    expect(suitability(s.map, 'berries', at(s, 4, 0))).toBe(0)
+    expect(suitability(s.map, 'berries', at(s, 1, 1))).toBe(40) // grass shaded by 3 trees
+    expect(suitability(s.map, 'wood', at(s, 1, 0))).toBe(100)
+    expect(suitability(s.map, 'wood', at(s, 4, 1))).toBe(15) // open grass
+    expect(suitability(s.map, 'wood', at(s, 2, 1))).toBe(40) // forest edge (2 tree neighbours)
+    expect(suitability(s.map, 'wood', at(s, 2, 0))).toBe(0)
+  })
+})
+
+describe('seed dispersal and germination', () => {
+  it('a mature bush with berries spreads seedlings nearby; a stripped one never does', () => {
+    // Five dawns: no seedling is old enough to seed itself, so every new plant is the parent's.
+    let born = 0
+    for (let k = 0; k < 20; k++) {
+      const s = field()
+      s.ecology.rng = [k + 11, 3, 5, 7]
+      putBush(s, 7, 7, { bornTick: -10 * TICKS_PER_DAY })
+      for (let d = 1; d <= 5; d++) ecologyAt(s, dawn(d), FULL)
+      const kids = s.map.resources.map((r, i) => (r && i !== at(s, 7, 7) ? i : -1)).filter((i) => i >= 0)
+      born += kids.length
+      for (const i of kids) {
+        expect(Math.abs((i % 15) - 7)).toBeLessThanOrEqual(3)
+        expect(Math.abs(Math.floor(i / 15) - 7)).toBeLessThanOrEqual(3)
+      }
+    }
+    expect(born).toBeGreaterThan(0)
+    const t = field()
+    putBush(t, 7, 7, { bornTick: -10 * TICKS_PER_DAY })
+    for (let d = 1; d <= 30; d++) {
+      t.map.resources[at(t, 7, 7)]!.amount = 0 // picked bare every day
+      ecologyAt(t, dawn(d), FULL)
+    }
+    expect(bushes(t)).toHaveLength(1)
+    expect(t.ecology.counters.births.berries).toBe(0)
+  })
+
+  it('seedlings start empty, grow up and begin to fruit — births add no resources', () => {
+    const s = field()
+    putBush(s, 7, 7, { bornTick: -10 * TICKS_PER_DAY })
+    const before = conservationTotals(s)
+    let firstSeedling = -1
+    for (let t = 1; t <= 40 * TICKS_PER_DAY; t++) {
+      ecologyAt(s, t, FULL)
+      expect(conservationTotals(s)).toEqual(before)
+      if (firstSeedling < 0 && s.map.resources.some((r) => r?.stage === 'seedling')) firstSeedling = t
+    }
+    expect(firstSeedling).toBeGreaterThan(0)
+    expect(s.map.resources.some((r, i) => r && i !== at(s, 7, 7) && r.stage === 'mature' && r.amount > 0)).toBe(true)
+  })
+
+  it.each([
+    ['inside the settled clearing', (s: WorldState) => {
+      // Structures whose clearings cover the bush's whole dispersal square (radius 3).
+      const tiles = [[5, 5], [9, 5], [5, 9], [9, 9], [7, 4], [7, 10], [4, 7], [10, 7]].map(([x, y]) => at(s, x!, y!))
+      s.structures.push(...tiles.map((tile, k) => ({ ...s.structures[0]!, id: 900 + k, kind: 'shelter' as const, tile, residentIds: [] })))
+    }],
+    ['when every neighbour tile is occupied or crowded', (s: WorldState) => {
+      for (let y = 4; y <= 10; y++) for (let x = 4; x <= 10; x++) if (!(x === 7 && y === 7)) s.map.resources[at(s, x, y)] = { ...plantNode('wood'), bornTick: -30 * TICKS_PER_DAY, lifespanDays: 150 }
+    }],
+    ['on unsuitable ground (rock all around)', (s: WorldState) => {
+      s.map.terrain = s.map.terrain.map((t, i) => (i === at(s, 7, 7) ? t : 'rock'))
+    }],
+    ['at the safety cap', (s: WorldState) => {
+      const cap = safetyCap(s.map, 'berries')
+      for (let i = 0, n = 1; n < cap && i < s.map.resources.length; i++) if (!s.map.resources[i] && Math.abs((i % 15) - 7) + Math.abs(Math.floor(i / 15) - 7) > 4) { s.map.resources[i] = { ...plantNode('berries'), amount: 0, bornTick: -10 * TICKS_PER_DAY, lifespanDays: 44 }; n++ }
+    }],
+  ])('no germination %s', (_name, block) => {
+    const s = field()
+    putBush(s, 7, 7, { bornTick: -10 * TICKS_PER_DAY })
+    block(s)
+    const before = bushes(s).length
+    for (let d = 1; d <= 30; d++) {
+      ecologyAt(s, dawn(d), FULL)
+      for (const r of s.map.resources) if (r?.kind === 'berries' && r !== s.map.resources[at(s, 7, 7)]) r.amount = 0 // only the test bush may seed
+    }
+    expect(s.ecology.counters.births.berries).toBe(0)
+    expect(bushes(s).length).toBe(before)
+  })
+
+  it('germination never lands in the clearing, but plants already there are kept', () => {
+    const s = field()
+    s.structures[0]!.tile = at(s, 7, 9)
+    putBush(s, 7, 7, { bornTick: -10 * TICKS_PER_DAY }) // inside the clearing (distance 2)
+    putBush(s, 7, 4, { bornTick: -10 * TICKS_PER_DAY }) // outside
+    for (let d = 1; d <= 30; d++) {
+      const mask = clearingMask(s)
+      const before = s.map.resources.map((r) => r !== null)
+      ecologyAt(s, dawn(d), FULL)
+      s.map.resources.forEach((r, i) => {
+        if (r && !before[i]) expect(mask[i], `germinated at ${i}`).toBe(0)
+      })
+    }
+    expect(s.map.resources[at(s, 7, 7)]).not.toBeNull() // the existing bush lives on
+  })
+
+  it('a dying bush full of berries may re-sprout as fallen fruit; a stripped one leaves nothing', () => {
+    let sprouts = 0
+    let strippedSprouts = 0
+    for (let k = 0; k < 20; k++) {
+      const s = field()
+      s.ecology.rng = [k + 1, 7, 99, 1234]
+      putBush(s, 7, 7, { stage: 'old', max: 4, amount: 4, bornTick: dawn(1) - 39 * TICKS_PER_DAY, lifespanDays: 40 })
+      ecologyAt(s, dawn(2), { senescence: true, reproduction: true })
+      sprouts += s.ecology.counters.fallenFruitSprouts
+      expect(s.map.resources[at(s, 7, 7)] === null || s.map.resources[at(s, 7, 7)]!.stage === 'seedling').toBe(true)
+      const t = field()
+      t.ecology.rng = [k + 1, 7, 99, 1234]
+      putBush(t, 7, 7, { stage: 'old', max: 4, amount: 0, bornTick: dawn(1) - 39 * TICKS_PER_DAY, lifespanDays: 40 })
+      ecologyAt(t, dawn(2), FULL)
+      strippedSprouts += t.ecology.counters.fallenFruitSprouts
+      expect(t.ledger.foodDecayed).toBe(0)
+    }
+    expect(sprouts).toBeGreaterThan(0)
+    expect(strippedSprouts).toBe(0)
+  })
+})
+
+describe('collapse and natural recovery (TDS H8)', () => {
+  it('a patch stripped every day cannot reproduce and dies out within one lifetime', () => {
+    const s = field()
+    for (const [x, y] of [[6, 6], [8, 6], [6, 8], [8, 8]] as const) putBush(s, x, y, { bornTick: -10 * TICKS_PER_DAY, lifespanDays: 30 })
+    for (let d = 1; d <= 45; d++) {
+      for (const r of s.map.resources) if (r) r.amount = 0
+      ecologyAt(s, dawn(d), FULL)
+    }
+    expect(bushes(s)).toHaveLength(0)
+    expect(s.ecology.counters.births.berries).toBe(0)
+  })
+
+  it('once harvesting stops, an unharvested ring recolonises the emptied patch', () => {
+    const s = field(21, 21)
+    const ring = [[10, 5], [15, 10], [10, 15], [5, 10], [6, 6], [14, 14]] as const
+    for (const [x, y] of ring) putBush(s, x, y, { bornTick: -10 * TICKS_PER_DAY, lifespanDays: 44 })
+    for (let d = 1; d <= 60; d++) ecologyAt(s, dawn(d), FULL)
+    const inPatch = () => s.map.resources.filter((r, i) => r?.kind === 'berries' && r.stage !== 'seedling' && Math.abs((i % 21) - 10) <= 2 && Math.abs(Math.floor(i / 21) - 10) <= 2)
+    expect(inPatch().length).toBeGreaterThanOrEqual(2)
+  })
+
+  it('the ecology ignores colony need: same plants whatever the stockpile and hunger (no rescue)', () => {
+    const a = createWorld({ seed: 'no-rescue-m10c' })
+    const b = createWorld({ seed: 'no-rescue-m10c' })
+    a.stockpile.food = 0
+    b.stockpile.food = 800
+    for (const c of a.citizens) c.needs.satiety = 1
+    for (let t = 1; t <= 90 * TICKS_PER_DAY; t++) {
+      ecologyAt(a, t, FULL)
+      ecologyAt(b, t, FULL)
+    }
+    expect(b.map.resources).toEqual(a.map.resources)
+    expect(b.ecology).toEqual(a.ecology)
+    expect(a.ecology.counters.births.berries).toBeGreaterThan(0)
+  })
+
+  it('draws only from the ecology stream, never the AI stream', () => {
+    const s = createWorld({ seed: 'eco-stream' })
+    const ai = [...s.rng]
+    for (let t = 1; t <= 30 * TICKS_PER_DAY; t++) ecologyAt(s, t, FULL)
+    expect(s.rng).toEqual(ai)
+  })
+})
+
+describe('shelters and seedlings', () => {
+  it('a shelter site may be built over a seedling, which is cleared (it holds nothing)', () => {
+    const { state: s } = sandbox(GRASS(11, 11), { camp: [5, 5], citizens: [{ x: 5, y: 6 }] })
+    s.stockpile.food = 0
+    const first = chooseSite(s)!
+    s.map.resources[first] = plantNode('berries', { stage: 'seedling', bornTick: 0 })
+    expect(chooseSite(s)).toBe(first)
+    s.map.resources[first] = plantNode('berries', { stage: 'young', bornTick: -3 * TICKS_PER_DAY })
+    expect(chooseSite(s)).not.toBe(first) // anything bigger than a seedling still blocks the site
+    s.map.resources[first] = plantNode('berries', { stage: 'seedling', bornTick: 0 })
+    const before = conservationTotals(s)
+    const site = planShelter(s)!
+    expect(site.tile).toBe(first)
+    expect(s.map.resources[first]).toBeNull()
+    expect(conservationTotals(s)).toEqual(before)
+  })
+})
+
+describe('whole simulation under M10c (default rules)', () => {
+  for (const seed of ['m10c-a', 'm10c-b']) {
+    it(`${seed}: conservation and plant invariants every tick for 120 days; plants keep reproducing`, () => {
+      const s = createWorld({ seed })
+      const start = conservationTotals(s)
+      for (let t = 0; t < 120 * TICKS_PER_DAY; t++) {
+        step(s)
+        expect(conservationTotals(s)).toEqual(start)
+        if (s.tick % TICKS_PER_DAY === 0) expect(plantViolations(s, true), `tick ${s.tick}`).toEqual([])
+      }
+      expect(s.ecology.counters.births.berries).toBeGreaterThan(0)
+      expect(s.ecology.counters.deaths.berries).toBeGreaterThan(0)
+      expect(bushes(s).length).toBeGreaterThan(0)
+      expect(s.map.resources.some((r) => r?.kind === 'wood')).toBe(true)
     })
   }
 })

@@ -79,13 +79,13 @@ describe('v5 → v6 migration of a real v0.1 save', () => {
     expect(w.events.map((e) => e.id)).toEqual(v5.events.map((e: { id: number }) => e.id))
   })
 
-  it('continues exactly as the v0.1 simulation would have (behaviour parity for 30 days, population rules off)', () => {
+  it('continues exactly as the v0.1 simulation would have (behaviour parity for 30 days, population and plant life-cycle rules off)', () => {
     const s = deserialize(v5json)
     const start = conservationTotals(s)
     const got: { tick: number; behaviour: string }[] = []
     for (const c of expected.continuation) {
       while (s.tick < c.tick) {
-        stepWithRules(s, { ...DEFAULT_SIM_RULES, population: false })
+        stepWithRules(s, { ...DEFAULT_SIM_RULES, ecology: { senescence: false, reproduction: false }, population: false })
         expect(conservationTotals(s)).toEqual(start)
       }
       got.push({ tick: s.tick, behaviour: behaviourHash(s) })

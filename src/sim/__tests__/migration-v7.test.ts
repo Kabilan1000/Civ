@@ -36,7 +36,11 @@ describe('v6 → v7 migration of a real M10b save', () => {
     const ADDED = ['bornTick', 'parentIds', 'partnerId', 'childIds', 'lastChildTick']
     const strip = (c: Record<string, unknown>) => Object.fromEntries(Object.entries(c).filter(([k]) => !ADDED.includes(k)))
     expect(w.citizens.map((c) => strip(c as never))).toEqual(v6.citizens)
-    expect(w.map).toEqual(v6.map)
+    // The v7 → v8 step re-ages plants (M10c); where they are and what they hold is unchanged.
+    const holding = (m: { resources: ({ kind: string; amount: number; max: number } | null)[] }) => m.resources.map((r) => r && [r.kind, r.amount, r.max])
+    expect(holding(w.map)).toEqual(holding(v6.map))
+    expect(w.map.terrain).toEqual(v6.map.terrain)
+    expect(w.map.discovered).toEqual(v6.map.discovered)
     expect(w.structures).toEqual(v6.structures)
     expect(w.ledger).toEqual(v6.ledger)
     expect(w.events).toEqual(v6.events)

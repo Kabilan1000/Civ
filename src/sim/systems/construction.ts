@@ -37,6 +37,11 @@ export function planShelter(state: WorldState, opts: { headroom?: boolean } = {}
   if (housingDeficit(state, opts) <= 0 || getOpenSite(state)) return null
   const tile = chooseSite(state)
   if (tile === null) return null
+  // Clear a seedling on the site (it holds no units, so nothing is lost; M10c).
+  if (state.map.resources[tile]?.stage === 'seedling') {
+    state.map.resources[tile] = null
+    state.map.version++
+  }
   const site: Structure = {
     id: allocateId(state),
     kind: 'shelter',

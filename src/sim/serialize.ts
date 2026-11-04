@@ -144,6 +144,26 @@ const migrations: Record<number, Migration> = {
       },
     }
   },
+  // v7 → v8 (M10c): plant senescence and reproduction switch on. Before M10c
+  // plants kept ageing while senescence was off, so in an established world
+  // most are already past their lifespan and would all die at the first dawn.
+  // Every living mature plant (all of them, before M10c) therefore gets a
+  // fresh lifespan and an age in its mature window relative to the save's
+  // current day, from hashes of seed, tile and a 'v8' salt — staggered so that
+  // no more than 10% of a kind share a death day. Positions, kinds, amounts
+  // and caps are unchanged; citizens, families, buildings, ledger, events and
+  // history are untouched.
+  7: (data) => {
+    const tick = data.tick as number
+    const seed = String((data.config as Record<string, unknown>).seed)
+    const map = data.map as Record<string, unknown>
+    const migrated = {
+      ...map,
+      resources: (map.resources as (Record<string, unknown> | null)[]).map((r) => (r ? { ...r } : null)),
+    } as unknown as TileMap
+    assignMigratedAges(migrated, seed, tick, 'v8:', (n) => n.stage === 'mature')
+    return { ...data, map: migrated }
+  },
 }
 
 export function serialize(state: WorldState): string {

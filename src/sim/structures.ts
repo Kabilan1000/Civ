@@ -159,7 +159,9 @@ export function isValidSite(
 ): boolean {
   const { map } = state
   const t = map.terrain[tile]
-  if ((t !== 'grass' && t !== 'sand' && t !== 'forest') || map.discovered[tile] !== 1 || map.resources[tile] !== null) {
+  // A seedling (holding nothing) may be built over: new growth never blocks housing (M10c).
+  const plant = map.resources[tile]
+  if ((t !== 'grass' && t !== 'sand' && t !== 'forest') || map.discovered[tile] !== 1 || (plant !== null && plant.stage !== 'seedling')) {
     return false
   }
   if (state.structures.some((s) => s.tile === tile)) return false

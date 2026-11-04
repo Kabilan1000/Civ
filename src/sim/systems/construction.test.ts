@@ -3,6 +3,7 @@ import { sandbox } from '../__tests__/sandbox.ts'
 import {
   SITE_OUTER_CAMP_DISTANCE,
   ENERGY_RATES,
+  HOUSING_HEADROOM,
   SHELTER_CAPACITY,
   SHELTER_WOOD,
   SHELTER_WORK_TICKS,
@@ -282,8 +283,13 @@ describe('construction in a running colony', () => {
         }
       }
       const complete = getShelters(s).filter((x) => x.stage === 'complete')
-      expect(complete.length, seed).toBe(4)
-      expect(s.citizens.filter((c) => c.homeId !== null).length, seed).toBe(12)
+      // Four shelters house twelve; one more is the Population V1 headroom shelter,
+      // built only once a couple exists (structures.housingDeficit).
+      const couples = s.citizens.filter((c) => c.alive && c.partnerId !== null).length / 2
+      expect(complete.length, seed).toBe(couples > 0 ? complete.length : 4)
+      expect(complete.length, seed).toBeGreaterThanOrEqual(4)
+      expect(complete.length, seed).toBeLessThanOrEqual(4 + HOUSING_HEADROOM / SHELTER_CAPACITY)
+      expect(s.citizens.filter((c) => c.alive && c.homeId === null).length, seed).toBe(0)
       for (const sh of complete) expect(sh.woodDelivered).toBe(SHELTER_WOOD)
     }
   })

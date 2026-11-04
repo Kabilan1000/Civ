@@ -12,7 +12,8 @@
     "typecheck": "tsc -b",
     "lint": "oxlint",
     "sweep": "LW_SWEEP=1 vitest run src/sim/__tests__/long.sweep.test.ts --silent=false",
-    "sweep:population": "LW_POP_SWEEP=1 vitest run src/sim/__tests__/population.sweep.test.ts --silent=false"
+    "sweep:population": "LW_POP_SWEEP=1 vitest run src/sim/__tests__/population.sweep.test.ts --silent=false",
+    "sweep:ecology": "LW_ECO_SWEEP=1 vitest run src/sim/__tests__/ecology.sweep.test.ts --silent=false"
   },
   "dependencies": {
     "pixi.js": "^8.22.0",

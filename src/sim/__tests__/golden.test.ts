@@ -32,12 +32,13 @@ describe('D6 seed stability: tick-0 terrain and resources unchanged since v0.1',
 // housing headroom). With its rules switched off, every other system —
 // including M10b's plant lifecycle (senescence off) and the v7 save shape —
 // must still behave exactly like the pre-M10b simulation.
-const NO_POPULATION = { ...DEFAULT_SIM_RULES, population: false }
+// Plant senescence and reproduction (M10c) also change behaviour on purpose and are switched off here.
+const NO_POPULATION = { ...DEFAULT_SIM_RULES, ecology: { senescence: false, reproduction: false }, population: false }
 const stepNWith = (s: Parameters<typeof stepWithRules>[0], n: number) => {
   for (let i = 0; i < n; i++) stepWithRules(s, NO_POPULATION)
 }
 
-describe('behaviour parity with the pre-M10b simulation (population rules off; senescence off)', () => {
+describe('behaviour parity with the pre-M10b simulation (population and plant life-cycle rules off)', () => {
   it('fixture was recorded from a known commit for the golden seeds and checkpoints', () => {
     expect(behaviour.sourceCommit).toMatch(/^[0-9a-f]{40}$/)
     expect(behaviour.seeds.map((s) => s.seed)).toEqual([...GOLDEN_SEEDS])

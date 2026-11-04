@@ -82,6 +82,8 @@ export interface CivStats {
   rivalries: number
   /** Population V1: living citizens by life stage, couples, and cumulative births and deaths. */
   people: { children: number; adults: number; elders: number; couples: number; births: number; deaths: number; oldAgeDeaths: number }
+  /** M10c: plants on the whole island (the land changes under the fog too). */
+  plants: { bushes: number; trees: number; seedlings: number; deadwood: number; births: number; deaths: number }
 }
 
 /** Derived civilization snapshot (not stored in state). */
@@ -134,7 +136,24 @@ export function getCivStats(state: WorldState): CivStats {
       deaths: state.population.counters.deaths,
       oldAgeDeaths: state.population.counters.oldAgeDeaths,
     },
+    plants: plantCensus(state),
   }
+}
+
+/** Plants by kind and stage, plus cumulative plant births and deaths (M10c). */
+export function plantCensus(state: WorldState): CivStats['plants'] {
+  const out = { bushes: 0, trees: 0, seedlings: 0, deadwood: 0, births: 0, deaths: 0 }
+  for (const r of state.map.resources) {
+    if (!r) continue
+    if (r.stage === 'seedling') out.seedlings++
+    if (r.stage === 'dead') out.deadwood++
+    else if (r.kind === 'berries') out.bushes++
+    else out.trees++
+  }
+  const c = state.ecology.counters
+  out.births = c.births.berries + c.births.wood
+  out.deaths = c.deaths.berries + c.deaths.wood
+  return out
 }
 
 /** Living citizens by life stage. */

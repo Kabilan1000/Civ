@@ -2,7 +2,7 @@
 import type { Needs, Role, Stockpile, Terrain } from './types.ts'
 
 /** Bump whenever the serialized WorldState shape changes, and add a migration. */
-export const SCHEMA_VERSION = 7
+export const SCHEMA_VERSION = 8
 
 // ── Time ────────────────────────────────────────────────────────────────────
 
@@ -205,12 +205,14 @@ export const TREE_REGROW_INTERVAL = 160 // 1.5 units per tree per day (mature; h
 // Trees are short-lived pioneers (GDD §3.3); a dead tree is harvestable deadwood.
 
 /**
- * M10b gate (TDS §7.11): plant senescence — the 'old' stage and death — is OFF
- * until reproduction arrives in M10c. While off, plants still age but stay
- * mature, which is exactly v0.1 behaviour, so the ecology cannot run down.
- * Tests pass rules with senescence on (systems/ecology.ts EcologyRules).
+ * Plant senescence — the 'old' stage and death. On since M10c, together with
+ * reproduction (TDS §7.11: never one without the other). Saves from before
+ * M10c are migrated to v8 with re-staggered plant ages, so switching this on
+ * never kills a world's plants at its first dawn.
  */
-export const PLANT_SENESCENCE_ENABLED = false
+export const PLANT_SENESCENCE_ENABLED = true
+/** Seed dispersal and fallen-fruit germination (M10c). */
+export const PLANT_REPRODUCTION_ENABLED = true
 export const PLANT_SEEDLING_DAYS = { berries: 2, wood: 6 } as const
 export const PLANT_MATURE_AT_DAYS = { berries: 5, wood: 20 } as const
 export const PLANT_OLD_AT_PERMILLE = { berries: 800, wood: 750 } as const
@@ -227,6 +229,50 @@ export const PLANT_REGROWTH: Readonly<Record<'berries' | 'wood', Record<'seedlin
 }
 /** Deadwood loses one unit (to ledger.woodDecayed) every this many days after death. */
 export const DEADWOOD_ROT_DAYS = 4
+
+// ── Plant reproduction (M10c, TDS §7.1–7.2) ──────────────────────────────────
+// Once per dawn each seed-bearing plant may cast one seed. Stripped plants
+// can't seed (GDD §3.9); a dying bush's remaining berries may sprout nearby.
+// New plants start as seedlings holding nothing, so reproduction never adds
+// resources — those still enter only through counted regrowth.
+/**
+ * A plant must hold at least this much at dawn to cast a seed (a bush picked
+ * bare cannot spread).
+ * M10c tuning: berries 3 → 1 (TDS risk R2's fallback). At 60 citizens every
+ * bush on the island was stripped daily, none ever held 3 at dawn, and the
+ * whole stock aged out within one lifetime: a 60-citizen village starved.
+ */
+export const SEED_MIN_UNITS = { berries: 1, wood: 4 } as const
+/** Daily chance (‰) that an eligible plant casts a seed; halved when old. M10c tuning: berries 120 → 200 (see SEED_MIN_UNITS). */
+export const SEED_CHANCE_PERMILLE = { berries: 200, wood: 50 } as const
+/** A seed lands within this Chebyshev radius (never on its parent). */
+export const DISPERSAL_RADIUS = { berries: 3, wood: 2 } as const
+/**
+ * A seed germinates only if at most this many same-kind plants are among the
+ * 8 neighbours (deadwood counts as a tree). M10c tuning: berries 2 → 1, so
+ * crowding — not the safety cap — limits bush density once seeding is easier.
+ */
+export const CROWD_MAX = { berries: 1, wood: 5 } as const
+/** Per berry on a dying bush (up to FALLEN_FRUIT_MAX_ROLLS): chance (‰) it sprouts on the bush's tile or a neighbour. */
+export const FALLEN_FRUIT_PERMILLE = 150
+export const FALLEN_FRUIT_MAX_ROLLS = 6
+/** No germination within this Manhattan distance of any structure (or on one). Existing plants there stay. */
+export const SETTLED_CLEARING = 2
+/** Safety bound (‰ of land tiles): germination stops at this many plants of a kind. Reaching it means tuning is wrong. */
+export const PLANT_SAFETY_CAP_PERMILLE = { berries: 200, wood: 450 } as const
+/**
+ * Habitat suitability 0–100 by terrain (ecology/habitat.ts adds neighbourhood
+ * rules: sand needs grass next to it for bushes; ≥ 3 tree neighbours shade a
+ * bush to 40%; a tree on grass is 40 at a forest edge, else 15).
+ */
+export const HABITAT = {
+  berries: { grass: 100, forest: 30, sand: 15, rock: 0, water: 0 },
+  wood: { grass: 15, forest: 100, sand: 0, rock: 0, water: 0 },
+} as const
+export const SHADE_TREES = 3
+export const SHADE_PERCENT = 40
+export const FOREST_EDGE_TREES = 2
+export const FOREST_EDGE_SUITABILITY = 40
 
 // ── Construction & housing ──────────────────────────────────────────────────
 // Balance: 4 shelters house 12 citizens and cost 48 wood. Builders gather

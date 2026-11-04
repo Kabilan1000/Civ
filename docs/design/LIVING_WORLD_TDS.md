@@ -609,6 +609,61 @@ Consequences for the specification, corrected above:
   off), and the seedling site claim, which only matters once germination
   exists (M10c).
 
+### 7.11b M10c as implemented
+
+**Migration v7 → v8 (protecting established worlds).** Before M10c, plants
+kept ageing while senescence was off. In real Population V1 saves every
+plant was already past its lifespan: 119 of 119 at day 900 and 128 of 128
+at day 2,160, and 23 of 119 even in a day-26 v6 save. Switching senescence
+on would have killed them all at the first dawn. The v8 migration gives
+every living mature plant a fresh lifespan and an age in its mature window,
+relative to the save's day (hash of seed, `v8:` salt, tile and attempt).
+Ages are staggered so that at most 10% of a kind share a death day.
+Positions, kinds, amounts, caps and everything outside plants are unchanged.
+This was tested on real 30- and 60-citizen v7 villages: none past its life,
+the first dawn kills at most 10%, conservation holds every tick for 30 days,
+and save/resume is exact. v5 and v6 saves migrate through it.
+
+**Tuning changed from §7.2, with evidence:**
+
+| Constant | Spec | Shipped | Why |
+|---|---|---|---|
+| `SEED_MIN_UNITS.berries` | 3 | **1** | At 60 citizens every bush was stripped daily, so none held 3 at dawn. The stock aged out and the village starved: 60 → 0 in 80 days. This is risk R2's fallback; a bush picked bare (0) still can't spread. |
+| `SEED_CHANCE_PERMILLE.berries` | 120 | **200** | With threshold 1 alone, the 60-citizen village still fell 60 → 10. |
+| `CROWD_MAX.berries` | 2 | **1** | With easier seeding, crowding 2 let bushes reach the safety cap on 2 of 7 runs. At 1, density is limited naturally (0 cap hits). |
+| `SEASON_GERMINATION‰` | spring flush, no winter | **not implemented** | Functional seasons are out of scope for M10c. |
+
+**Results** (`npm run sweep:ecology`; hard gates asserted every tick). All
+gates held: conservation, plant invariants, no germination in clearings,
+safety cap never reached, and exact save/resume.
+
+| Run | Population | Needs deaths | Bushes | Trees | Forage trip (steps) | Forage-near-camp zero episodes |
+|---|---|---|---|---|---|---|
+| 30 new worlds × 120 d | 12 → 19–22 | 0 | ×1.3–3.2 (median 2.1) | ×0.36–0.96 (median 0.65) | — | — |
+| 4 new worlds × 400 d | 12 → 24–30 | 0 | 27–42 → 48–65 | 79–91 → 60–80 | 8–9 | 0 |
+| pop-12 × 400 d | 12 → 29 | 0 | 37 → 66 | 108 → 74 | 8.7 | 0 |
+| pop-30 (v7) × 400 d | 30 → 39 | 0 | 31 → 66 | 88 → 39 | 10.2 | 0 |
+| pop-60 (v7) × 400 d | 60 → 60 | 0 | 28 → 30 (range 28–50) | 100 → 91 (54–114) | 13.9 | 12 (longest 31 d), all recovered |
+
+In every case the worst single dawn killed at most 7% of plants. Worst
+satiety was 21–28.
+
+**Balance targets missed, for review (not correctness):**
+
+- **Bushes rise above the 60–160% band** in small villages. v0.1 places
+  bushes sparsely, and reproduction fills the island up to the crowding
+  limit. More food supports larger villages.
+- **Trees fall below the 70–140% band.** The initial cohort ages out over
+  about 120 days, then trees hold a stable equilibrium at about 60–80% of
+  v0.1's dense forests, lower near busy villages (pop-30: 39–48), under
+  chopping and the clearings round many shelters. No run showed a continuing
+  decline.
+- **Large villages see recoverable local scarcity** near camp. This is
+  intended (GDD §3.10).
+
+Performance: `step` takes 0.19–0.29 ms with 12–40 citizens and 0.52 ms at 60
+(Population V1: 0.50).
+
 ### 7.12 Note: 100× speed (added in M10a)
 
 At 100× (500 ticks/s) the M10 budget of 0.25 ms per tick costs about 12.5%

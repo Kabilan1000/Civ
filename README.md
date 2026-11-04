@@ -77,6 +77,19 @@ housed by about day 2–3; explorers open up most of the island within a few
 days; friendships form over the first weeks; arguments are common, lasting
 rivalries rare.
 
+## Living land
+
+The island's plants live too. Berry bushes and trees sprout from seed, grow
+up (small at first), fruit and grow wood, turn old (faded on the map) and
+die. A bush's last berries may fall and sprout; a dead tree stands as grey
+deadwood that builders can still chop until it rots away. Mature plants
+spread seeds to free, suitable ground nearby — bushes on grass, trees in and
+at the edge of the forest — but never right next to buildings, and a bush
+picked bare can't spread. So heavy foraging thins the bushes near camp and
+pushes foragers further out, and the land recovers once the pressure moves
+on. The **Plants** card counts bushes, trees and sprouts. The land keeps
+changing in the fog, whether anyone watches or not.
+
 ## Generations
 
 The village is no longer fixed at twelve. Ages are counted in world years
