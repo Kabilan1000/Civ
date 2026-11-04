@@ -1,7 +1,9 @@
 import { performance } from 'node:perf_hooks'
 import { describe, expect, it } from 'vitest'
-import { ARCHIVE_MAX, MAX_MEMORIES, PLANT_SENESCENCE_ENABLED, MAX_OVERCROWD, MAX_POPULATION, SHELTER_CAPACITY, TICKS_PER_DAY, TICKS_PER_YEAR } from '../constants.ts'
+import { lifeStage } from '../citizens/life.ts'
+import { ARCHIVE_MAX, FOG_FULL_DAYS, GENERATIONS_MAX, MAX_MEMORIES, PLANT_SENESCENCE_ENABLED, MAX_OVERCROWD, MAX_POPULATION, SHELTER_CAPACITY, TICKS_PER_DAY, TICKS_PER_SEASON, TICKS_PER_YEAR } from '../constants.ts'
 import { isAdjacent4, isPassable } from '../grid.ts'
+import { getGenerations } from '../selectors.ts'
 import { deserialize, serialize } from '../serialize.ts'
 import type { WorldState } from '../types.ts'
 import { createWorld, step } from '../world.ts'
@@ -52,6 +54,17 @@ describe.skipIf(!RUN)('population sweep', () => {
       const idle = new Map<number, number>()
       let simMs = 0
       const bad: string[] = []
+      // Workforce, fog, food and housing (revised priorities before M10d)
+      let noExplorerDays = 0
+      let noExplorerStreak = 0
+      let noExplorerLongest = 0
+      let maxStale = 0
+      let sumStale = 0
+      let minFoodPer = Infinity
+      let maxHomeless = 0
+      const genBad: string[] = []
+      let roleChanges = 0
+      let seenEvent = 0
       for (let t = 1; t <= DAYS * TICKS_PER_DAY; t++) {
         const t0 = performance.now()
         step(s)
@@ -97,13 +110,39 @@ describe.skipIf(!RUN)('population sweep', () => {
         peak = Math.max(peak, living.length)
         if (day > 48) low = Math.min(low, living.length)
         maxRel = Math.max(maxRel, ...living.map((x) => Object.keys(x.relationships).length), 0)
+        for (const e of s.events) if (e.id > seenEvent && e.kind === 'roleChanged') roleChanges++
+        seenEvent = s.events.at(-1)?.id ?? seenEvent
+        const adults = living.filter((x) => lifeStage(s, x) === 'adult')
+        if (adults.length >= 5 && !adults.some((x) => x.role === 'explorer')) {
+          noExplorerDays++
+          noExplorerLongest = Math.max(noExplorerLongest, ++noExplorerStreak)
+        } else noExplorerStreak = 0
+        const known = s.map.discovered.reduce<number>((n, d) => n + d, 0)
+        const stale = s.map.lastSeen.filter((v, i) => s.map.discovered[i] === 1 && s.tick - v >= FOG_FULL_DAYS * TICKS_PER_DAY).length / known
+        maxStale = Math.max(maxStale, day > 96 ? stale : 0)
+        sumStale += stale
+        if (day > 48) minFoodPer = Math.min(minFoodPer, s.stockpile.food / living.length)
+        maxHomeless = Math.max(maxHomeless, living.filter((x) => x.homeId === null).length)
+        if (s.tick % TICKS_PER_SEASON === 0) {
+          // The long-term record matches the recent sample it summarised, exactly.
+          const g = s.generations.at(-1)!
+          const h = s.history.at(-1)!
+          if (g.tick !== s.tick || g.population !== h.population || g.children !== h.children || g.food !== h.food || g.housed !== h.housed || g.births !== c.births || g.deaths !== c.deaths)
+            genBad.push(`d${day}: generation summary ≠ state`)
+          if (s.generations.length !== Math.min(GENERATIONS_MAX, s.tick / TICKS_PER_SEASON)) genBad.push(`d${day}: ${s.generations.length} summaries`)
+        }
         if (day % 240 === 0) {
           maxSave = Math.max(maxSave, serialize(s).length)
-          traj.push(`y${day / 48}:${living.length}`)
+          const st = { child: 0, adult: 0, elder: 0 }
+          for (const x of living) st[lifeStage(s, x)]++
+          traj.push(`y${day / 48}:${living.length}(${st.child}/${st.adult}/${st.elder})`)
         }
       }
       needsDeaths = s.citizens.filter((x) => !x.alive && x.deathCause !== 'oldAge').length + s.archive.filter((x) => x.cause !== 'oldAge').length
       // save/resume across everything that happened
+      expect(genBad.slice(0, 5)).toEqual([])
+      const rows = getGenerations(s)
+      expect(rows.reduce((n, r) => n + (r.seasonBirths ?? 0), 0)).toBe(rows.at(-1)?.births ?? 0) // per-season counts add up to the record
       const resumed = deserialize(serialize(s))
       for (let k = 0; k < 2 * TICKS_PER_DAY; k++) {
         step(s)
@@ -120,7 +159,9 @@ describe.skipIf(!RUN)('population sweep', () => {
           `old-age death d${first.oldAge} (${at100x(first.oldAge)}) founders gone d${first.foundersGone} (${at100x(first.foundersGone)})\n` +
           `        pop peak ${peak} low ${low} end ${living.length} | births ${counters.births} deaths ${counters.deaths} (old age ${counters.oldAgeDeaths}, needs ${needsDeaths}) ` +
           `| generation ${maxGen} | archive ${s.archive.length} | max rel/citizen ${maxRel} | max save ${(maxSave / 1024).toFixed(0)} KB ` +
-          `| idle streak ${idleStreak} | ${(simMs / (DAYS * TICKS_PER_DAY)).toFixed(3)} ms/tick\n        ${traj.join(' ')}`,
+          `| idle streak ${idleStreak} | ${(simMs / (DAYS * TICKS_PER_DAY)).toFixed(3)} ms/tick\n` +
+          `        explorer gaps ${noExplorerDays}d (longest ${noExplorerLongest}d) | replacement explorers ${roleChanges} | stale fog mean ${((100 * sumStale) / DAYS).toFixed(0)}% max ${(100 * maxStale).toFixed(0)}% ` +
+          `| min food/person ${minFoodPer.toFixed(1)} | max unhoused ${maxHomeless} | ${s.generations.length} season summaries (${s.generations.length * 12} days)\n        ${traj.join(' ')}`,
       )
       void TICKS_PER_YEAR
     }, 7_200_000)
