@@ -107,22 +107,26 @@ and how much has gone stale.
 The village is no longer fixed at twelve. Ages are counted in world years
 (48 days):
 
-- **Founders** are adults aged 18–36.
+- **Founders** are young adults aged 7–12.
 - **Partners:** adults who like and know each other well become partners.
 - **Children:** a couple with a home, while the village has food to spare
   (3 per person in the stockpile), may have a child — at most one a year
   each, and never beyond 60 villagers. A full home is no obstacle: the
   child squeezes in, and the builders plan another shelter.
 - **Childhood:** children eat (less than adults), sleep at home, play near
-  the campfire and chat. They come of age at **14** and take up work.
-- **Old age:** from **50**, each birthday may be a citizen's last; nobody
-  lives past **65**. Starvation and exhaustion still kill too, but rarely.
+  the campfire and chat. They come of age at **5** and take up work; if
+  the village has no explorer, the newcomer — or else the most curious
+  forager or builder who can be spared — becomes one.
+- **Old age:** from **15**, each birthday may be a citizen's last, more
+  likely every year; nobody lives past **22**. Starvation and exhaustion still kill too, but rarely.
 - **The archive:** a year after death a citizen is archived; their name lives
   on in their family's records.
 
-At **100×** the first child arrives within about a minute, children grow up in
-about 6 minutes, old age begins to take the founders after 7–9 minutes, and
-the founding generation is gone in roughly 20 minutes. Villages differ: food
+Lives are short so generations turn over quickly: at **100×** the first
+child arrives within seconds, the first child grows up after about 2 minutes,
+old age begins to take the founders soon after, and the founding generation
+is gone in about 4–6 minutes. Worlds saved before this change keep the
+slower rules they began with (adult at 14, elder at 50, at most 65). Villages differ: food
 and space set how far each one grows. The dashboard counts children, adults,
 elders, couples, births and deaths; the inspector shows each citizen's age and
 family; the History panel charts children, elders, births and deaths.

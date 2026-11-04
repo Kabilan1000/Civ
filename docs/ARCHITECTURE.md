@@ -138,11 +138,18 @@ positions above as their milestones land.
 
 ### 3.4b Population (Population V1, `systems/lifecycle.ts`, `citizens/life.ts`)
 
-- Ages in world years (48 days) from `Citizen.bornTick` (a dawn tick):
-  child < 14 ≤ adult < 50 ≤ elder; old-age hazard on each birthday from 50
-  (`floor(1000·k²/256)‰`, k = age − 49), certain at 65. Founders 18–36 from
+- Ages in world years (48 days) from `Citizen.bornTick` (a dawn tick).
+  Life-stage ages come from the world's own **demographic profile**
+  (`state.population.profile`, schema v10): new worlds use `FAST_PROFILE`
+  (`fast-v1`: child < 5 ≤ adult < 15 ≤ elder, certain death at 22, founders
+  7–12, fertile 6–16); saves from before v10 keep `CLASSIC_PROFILE`
+  (`classic-v1`: 14 / 50 / 65, founders 18–36, fertile 16–42) — their
+  citizens and histories are never rewritten. Both use 40‰ births and a
+  48-day spacing; the calendar is the same. Old-age hazard on each birthday:
+  `floor(1000·k²/span²)‰`, k = age − elderAge + 1, span = maxAge − elderAge
+  + 1 (fast: 15‰ at 15, 140‰ at 17, 390‰ at 19, 765‰ at 21). Founders from
   a creation-only `seed#founders` stream.
-- Dawn pass, ascending ids: birthdays → partnerships (mutual affinity and
+- Dawn pass, ascending ids: birthdays → explorer staffing → partnerships (mutual affinity and
   familiarity ≥ 30, not kin) → births (fertile 16–42, a home below 3 + 2
   residents, food ≥ 3 × living, < 60 living, a year since each parent's
   last child, 40‰) → `assignHomes` → archive (dead > 48 days ago; ≤ 400).
@@ -150,6 +157,13 @@ positions above as their milestones land.
 - Children only eat, rest, socialize and wander (within 4 of the campfire);
   their satiety decays at 0.6×. The jitter for every action is still drawn,
   so RNG draw counts never depend on life stage. Elders don't explore.
+- Workforce (`citizens/workforce.ts`): only adults count. A newborn's role
+  is provisional; at coming of age a citizen becomes the explorer if there
+  is no adult one (a second if curiosity ≥ 0.6, at most `MAX_EXPLORERS`),
+  else the scarcer of forager/builder. If a dawn finds no adult explorer,
+  the most curious adult forager or builder who can be spared (foragers ≥
+  max(2, ¼ of adults), builders ≥ `MIN_BUILDERS`; ties: lower id) becomes
+  one (`roleChanged` event). Only while there is none, so nobody flips back.
 - Housing (`structures.housingDeficit`): living + couples apart + headroom
   (3 beds while a couple exists, food ≥ 5 × living and below the cap) −
   beds. A birth may overcrowd a home (≤ 5 residents), which raises demand,
