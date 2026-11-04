@@ -1,5 +1,5 @@
 import { useState, type PointerEvent } from 'react'
-import { layoutMarkers } from '../format/calendar.ts'
+import { MARKER_LABEL_WIDTH, layoutMarkers } from '../format/calendar.ts'
 import { niceMax, segments } from '../format/chart.ts'
 
 export interface Series {
@@ -31,7 +31,12 @@ interface Props {
   /** Tooltip heading; defaults to formatX. */
   formatTooltip?: (tick: number) => string
   /** Season starts inside the span: `at` is a fractional sample index (see ui/format/calendar.ts). */
-  markers?: readonly { at: number; label: string; short: string }[]
+  /**
+   * `title` (hover text) defaults to "<label> begins" (season lines). Markers
+   * with their own title (e.g. Peak) keep their label at the right edge,
+   * right-aligned, instead of dropping it.
+   */
+  markers?: readonly { at: number; label: string; short: string; title?: string }[]
 }
 
 const W = 320
@@ -50,9 +55,19 @@ export function LineChart({ title, ticks, series, yMax, yMin = 0, unit = '', for
   const min = Math.min(0, yMin)
   const y = (v: number) => M.top + ih - ((Math.max(min, Math.min(max, v)) - min) / (max - min)) * ih
   const gridValues = min < 0 ? [min, 0, max] : [0, max / 2, max]
-  const seasonLines = layoutMarkers(markers.map((m) => ({ ...m, x: x(m.at) })), W - M.right)
-  const seasonsText = markers.length ? `. Seasons begin: ${markers.map((m) => m.label).join(', ')}` : ''
+  const seasonLines = layoutMarkers(markers.map((m) => ({ ...m, x: x(m.at) })), W - M.right).map((m) =>
+    m.title !== undefined && !m.labelled && m.x > W - M.right - MARKER_LABEL_WIDTH ? { ...m, labelled: true, end: true } : { ...m, end: false },
+  )
+  const seasons = markers.filter((m) => m.title === undefined)
+  const seasonsText =
+    (seasons.length ? `. Seasons begin: ${seasons.map((m) => m.label).join(', ')}` : '') +
+    markers
+      .filter((m) => m.title !== undefined)
+      .map((m) => `. ${m.title}`)
+      .join('')
 
+  // A tap fires pointerdown (no move) and, on touch screens, pointerleave right after lifting the finger:
+  // show the tooltip on down, and keep it after a touch until the next tap.
   const onMove = (e: PointerEvent<SVGSVGElement>) => {
     if (n === 0) return
     const rect = e.currentTarget.getBoundingClientRect()
@@ -77,7 +92,7 @@ export function LineChart({ title, ticks, series, yMax, yMin = 0, unit = '', for
         </span>
       </figcaption>
       <div className="chart-plot">
-        <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`${title}: ${series.map((s) => `${s.label} ${show(lastValue(s.values), unit)}`).join(', ')}${seasonsText}`} onPointerMove={onMove} onPointerLeave={() => setHover(null)}>
+        <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`${title}: ${series.map((s) => `${s.label} ${show(lastValue(s.values), unit)}`).join(', ')}${seasonsText}`} onPointerMove={onMove} onPointerDown={onMove} onPointerLeave={(e) => e.pointerType !== 'touch' && setHover(null)}>
           {gridValues.map((g) => (
             <g key={g}>
               <line x1={M.left} x2={W - M.right} y1={y(g)} y2={y(g)} className="grid" />
@@ -88,10 +103,10 @@ export function LineChart({ title, ticks, series, yMax, yMin = 0, unit = '', for
           ))}
           {seasonLines.map((m) => (
             <g key={m.label} className="season-marker">
-              <title>{`${m.label} begins`}</title>
+              <title>{m.title ?? `${m.label} begins`}</title>
               <line x1={m.x} x2={m.x} y1={M.top} y2={M.top + ih} className="season-line" />
               {m.labelled && (
-                <text x={m.x + 3} y={M.top + 8} className="season-label">
+                <text x={m.end ? m.x - 3 : m.x + 3} y={M.top + 8} className="season-label" textAnchor={m.end ? 'end' : undefined}>
                   {m.short}
                 </text>
               )}

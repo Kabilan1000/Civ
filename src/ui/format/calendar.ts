@@ -114,7 +114,7 @@ export function seasonMarkers(ticks: readonly number[]): SeasonMarker[] {
  * edge; every marker keeps its line.
  */
 export const MARKER_LABEL_GAP = 26
-const MARKER_LABEL_WIDTH = 14
+export const MARKER_LABEL_WIDTH = 14
 export function layoutMarkers<T extends { x: number }>(markers: readonly T[], right: number): (T & { labelled: boolean })[] {
   const out: (T & { labelled: boolean })[] = []
   let lastLabelX = -Infinity

@@ -168,9 +168,18 @@ function GenerationsView({ state, version }: { state: WorldState; version: numbe
   const ticks = rows.map((r) => r.tick)
   const marks = populationMarks(rows.map((r) => r.population))
   const markers = [
-    ...(marks.peak ? [{ at: marks.peak.at, label: `Peak: ${marks.peak.value} people (${generationLabel(ticks[marks.peak.at]!)})`, short: 'Peak' }] : []),
+    ...(marks.peak
+      ? [{ at: marks.peak.at, label: 'Peak', title: `Peak: ${marks.peak.value} people (${generationLabel(ticks[marks.peak.at]!)})`, short: 'Peak' }]
+      : []),
     ...(marks.decline
-      ? [{ at: marks.decline.to, label: `Largest decline: ${marks.decline.high} → ${marks.decline.low} people (${generationLabel(ticks[marks.decline.from]!)} to ${generationLabel(ticks[marks.decline.to]!)})`, short: 'Low' }]
+      ? [
+          {
+            at: marks.decline.to,
+            label: 'Largest decline',
+            title: `Largest decline: ${marks.decline.high} → ${marks.decline.low} people (${generationLabel(ticks[marks.decline.from]!)} to ${generationLabel(ticks[marks.decline.to]!)})`,
+            short: 'Low',
+          },
+        ]
       : []),
   ].sort((a, b) => a.at - b.at)
   const nets = rows.map((r) => r.net)
