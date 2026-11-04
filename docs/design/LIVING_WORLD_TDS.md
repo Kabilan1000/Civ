@@ -929,6 +929,68 @@ also work, but would change v0.1 balance.
 - Performance: `step` takes 0.10, 0.24 and 0.50 ms at 12, 30 and 60
   citizens (budgets 0.3, 0.8 and 1.6).
 
+### 8.3c Accelerated profile and carrying capacity (schema v10–v12)
+
+**Profiles.** Demographic rules live in each world's
+`population.profile` and are kept for its whole life. New worlds use
+`fast-v1` (adult 5, elder 15, certain death at 22, founders 7–12, fertile
+6–16, 40‰ births, 48-day spacing, 1 bearing bush per person); every save
+from before v10 is `classic-v1` (14 / 50 / 65, founders 18–36, fertile
+16–42) with no bush check. The calendar is unchanged. Old-age hazard:
+`floor(1000·k²/span²)‰` (fast: 15‰ at 15, 140‰ at 17, 390‰ at 19, 765‰
+at 21).
+
+**Why a carrying-capacity check.** With short lives a village fills
+quickly. In a 50-year sweep without the check (8 seeds), 3 villages
+reached ~60 people on ~30 bearing bushes, stripped every bush, seeding
+stopped, the bushes aged out and food collapsed: 28, 45 and 45 deaths from
+needs (in pop-1, 27 in 8 days, every child among them; pop-5 fell from 59
+to 13). Births were already gated on stockpile food, but foragers hold the
+stockpile at their reserve target, so that gate does not reflect the land.
+A birth now also needs `bearingBushes ≥ (living + 1) ×
+birthBushesPerPersonPermille / 1000` (1000 for `fast-v1`, 0 = off).
+Compared at 0.8 and 1.0 per person: 0.8 left one seed with 4 needs deaths;
+1.0 had none.
+
+**What it measures.** Productive capacity, not food on the bush: young,
+mature and old berry bushes on discovered land count whatever they hold
+(a stripped bush regrows); seedlings do not. It reads the current state of
+known tiles, not the village's memory of them. Measured (8 seeds × 50
+years): 2% of counted bushes are empty at dawn, and counting only fruiting
+bushes would change the decision on 1–5% of days; 0.0–0.6% of counted
+bushes stand on land unseen for 24+ days, and counting only recently seen
+ones would change it on 0–1% of days. This is an interim balance rule,
+not a final population model.
+
+**Behaviour (8 seeds × 50 years, `fast-v1`).** All hard gates every tick;
+0 needs deaths; save/resume exact.
+
+| | |
+|---|---|
+| first birth / first adult | day 9–21 / day 249–261 (≈ 2 min at 100×) |
+| founders gone | day 522–675 (4.2–5.4 min at 100×) |
+| peak / end population | 51–60 / 20–58 |
+| generations reached | 6–7 |
+| check closed / the only block | 13–60% / 0–48% of days |
+| births resumed after a block | 28–44 of 51–65 episodes in the seven seeds where it binds (the rest reopened only briefly); pop-4: 1 of 4 |
+| explorer gaps | 0 days (0–6 replacements) |
+| stale fog | mean 2–4%, max 5–36% of known land |
+| step cost | 0.34–0.54 ms/tick; max save 491 KB |
+
+The check does not freeze healthy villages: three (pop-2, 6, 7) reach
+and hold 57–60, near the cap of 60, and every seed keeps having children
+in its last decade. Natural decline still happens: pop-1 falls from 48 to 20 as
+its bushes thin (the check holds births back, nobody starves), and pop-4
+from 49 to 27 with the check almost never binding (ageing and fewer
+couples). Villages stay distinct: end sizes run from 20 to 58.
+
+**Migration (v11 → v12).** Every existing world gets
+`birthBushesPerPersonPermille: 0`, the rule it was simulated under, so
+loading never changes its demographics. Verified on genuine v10 and v11
+saves written by the commits before the change: they load with
+everything else intact and continue for a world year (births, a death,
+comings of age) exactly as the code that wrote them did.
+
 ### 8.4 Deadlock freedom
 
 - Births need only a housed parent with an overcrowd margin, not a spare

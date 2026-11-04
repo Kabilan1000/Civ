@@ -138,7 +138,23 @@ function birthHome(state: WorldState, a: Citizen, b: Citizen): { parent: Citizen
   return options[0] ? { parent: options[0].parent, homeId: options[0].home.id } : null
 }
 
-/** Berry bushes that bear fruit (young, mature or old) on discovered land. */
+/**
+ * Berry bushes that bear fruit (young, mature or old) on discovered land.
+ *
+ * Deliberately a measure of PRODUCTIVE CAPACITY, not of food on the bush
+ * right now: a bush stripped this morning is counted, because it regrows
+ * (berries on a living bush are a stock that foragers empty and refill
+ * every day; counting them would tie births to the hour of the harvest).
+ * Seedlings bear nothing yet and are not counted. Measured over 8 seeds ×
+ * 50 years, 2% of counted bushes are empty at dawn and the decision would
+ * differ on 1–5% of days if only fruiting bushes counted (TDS §8.3c).
+ *
+ * Knowledge: only discovered tiles count, but their current state is read,
+ * not the village's memory of them. Explorers keep known land fresh, so on
+ * average 0.0–0.6% of counted bushes stand on land unseen for FOG_FULL_DAYS,
+ * and the decision would differ on 0–1% of days if only recently seen
+ * bushes counted. An interim balance rule, not a final population model.
+ */
 export function bearingBushes(state: WorldState): number {
   let n = 0
   const { resources, discovered } = state.map
